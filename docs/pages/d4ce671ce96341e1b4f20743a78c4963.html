@@ -318,4 +318,38 @@
 <span class="material-symbols-outlined text-secondary" data-icon="check_circle">check_circle</span>
 <span class="text-sm font-semibold text-on-surface">配置已验证，随时可保存</span>
 </div>
+<script data-stitch-nav-patch="true">
+(() => {
+  const routes = {"home": {"root": "./index.html", "page": "75a393ec1a2d424ebafa1d0e59402d26.html"}, "accum_edit": {"root": "./pages/81fee20edb5542f08bb363ac837b327c.html", "page": "81fee20edb5542f08bb363ac837b327c.html"}, "accum_new": {"root": "./pages/03ef40c5dff048f8b1416a6a4567f9ee.html", "page": "03ef40c5dff048f8b1416a6a4567f9ee.html"}, "add_level": {"root": "./pages/d142c0822784448ab9b8016e300bd25c.html", "page": "d142c0822784448ab9b8016e300bd25c.html"}, "dca": {"root": "./pages/530f6fe554444798820046dee4d4b889.html", "page": "530f6fe554444798820046dee4d4b889.html"}, "history": {"root": "./pages/65aaf3e700d3443c9810f6c727b045e8.html", "page": "65aaf3e700d3443c9810f6c727b045e8.html"}, "catalog": {"root": "./catalog.html", "page": "../catalog.html"}};
+  const rules = {"help 技术支持": "catalog", "help 帮助中心": "catalog", "help Support": "catalog", "warning 风险披露": "catalog", "warning Risk Disclosure": "catalog", "操作说明": "catalog", "策略原理": "catalog", "风险提示": "catalog", "Operational Instructions": "catalog", "Strategy Principles": "catalog", "Risk Warnings": "catalog", "控制面板": "home", "Dashboard": "home", "dashboard 仪表板": "home", "建仓计划": "home", "Accumulation": "home", "策略列表": "home", "数据分析": "history", "Analytics": "history", "analytics 策略分析": "history", "history 交易历史": "history", "add + 新增层级": "add_level", "add 新增层级": "add_level", "add_circle 添加阶梯": "add_level", "保存更改": "home", "save 保存更改": "home", "保存策略": "home", "取消": "home", "description Reports": "history", "analytics 分析": "history", "account_balance_wallet Strategies": "home", "dashboard 概览": "home", "account_balance_wallet 策略": "home", "description 报告": "history", "settings 设置": "catalog", "person 账户设置": "catalog", "logout 退出登录": "catalog"};
+  const insidePages = window.location.pathname.includes('/pages/');
+  const normalize = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  const resolveRoute = (targetKey) => {
+    const route = routes[targetKey];
+    if (!route) return null;
+    return insidePages ? route.page : route.root;
+  };
+  const bindTarget = (element, href) => {
+    if (!href) return;
+    if (element.tagName === 'A') {
+      element.setAttribute('href', href);
+      return;
+    }
+    element.setAttribute('type', 'button');
+    element.style.cursor = 'pointer';
+    element.addEventListener('click', (event) => {
+      event.preventDefault();
+      window.location.href = href;
+    });
+  };
+
+  document.querySelectorAll('a[href="#"], button').forEach((element) => {
+    const text = normalize(element.textContent);
+    if (!text) return;
+    const targetKey = rules[text];
+    if (!targetKey) return;
+    bindTarget(element, resolveRoute(targetKey));
+  });
+})();
+</script>
 </body></html>

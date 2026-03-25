@@ -13,6 +13,180 @@ DOCS_DIR = ROOT / "docs"
 HOMEPAGE_SCREEN_ID = "75a393ec1a2d424ebafa1d0e59402d26"
 EXCLUDED_TITLE_KEYWORDS = ("投资计划极简首页",)
 
+ROUTE_TARGETS = {
+    "home": {"root": "./index.html", "page": "75a393ec1a2d424ebafa1d0e59402d26.html"},
+    "accum_edit": {"root": "./pages/81fee20edb5542f08bb363ac837b327c.html", "page": "81fee20edb5542f08bb363ac837b327c.html"},
+    "accum_new": {"root": "./pages/03ef40c5dff048f8b1416a6a4567f9ee.html", "page": "03ef40c5dff048f8b1416a6a4567f9ee.html"},
+    "add_level": {"root": "./pages/d142c0822784448ab9b8016e300bd25c.html", "page": "d142c0822784448ab9b8016e300bd25c.html"},
+    "dca": {"root": "./pages/530f6fe554444798820046dee4d4b889.html", "page": "530f6fe554444798820046dee4d4b889.html"},
+    "history": {"root": "./pages/65aaf3e700d3443c9810f6c727b045e8.html", "page": "65aaf3e700d3443c9810f6c727b045e8.html"},
+    "catalog": {"root": "./catalog.html", "page": "../catalog.html"},
+}
+
+SCREEN_GROUPS = {
+    "home": {
+        "75a393ec1a2d424ebafa1d0e59402d26",
+        "8692ca0737d74aa78bd270ddbd5b1bf6",
+        "d8f0b16bd9d24c62992a5198ba3fa857",
+        "8d93d9d89df94ffdafd339da9d50f0b7",
+        "0754eda620a54150bd6b646b17aedc95",
+        "0b7f16c425a94d759f2a42e81a76be26",
+        "26eb098db14e4c4bb059b607c9578acc",
+        "42a1829a673444b584ff07bf3d340678",
+        "4acb407f6b6f4aa19d48e14db8fc3a02",
+    },
+    "accum_edit": {
+        "81fee20edb5542f08bb363ac837b327c",
+        "810ef0f6ff574c049df021d099547b63",
+        "d4ce671ce96341e1b4f20743a78c4963",
+        "3b3fa48876b2428c8b0da9b5a6d0b21d",
+        "13991f2d68d64c138978ca10834cf4e6",
+    },
+    "add_level": {
+        "d142c0822784448ab9b8016e300bd25c",
+    },
+    "accum_new": {
+        "03ef40c5dff048f8b1416a6a4567f9ee",
+        "09c23b22bbfb45f090edd43a2022b1d6",
+    },
+    "dca": {
+        "530f6fe554444798820046dee4d4b889",
+        "6878eff12a044d799bb7943f2753cbfa",
+        "8a9f687cbc2b43aa8ff9a3fee729d4f0",
+        "01a499e7120746da9b03b18b20876e4a",
+        "42e23956702a4e488dfd2e7d002b1a1f",
+        "328ef14fcb034d1186f1d3fe19c7852f",
+    },
+    "history": {
+        "65aaf3e700d3443c9810f6c727b045e8",
+    },
+}
+
+GROUP_RULES = {
+    "home": {
+        "交易": "home",
+        "建仓": "home",
+        "风险分散": "accum_edit",
+        "加仓": "accum_edit",
+        "成本摊薄": "dca",
+        "定投": "dca",
+        "add 新建仓计划": "accum_new",
+        "add 新建策略计划": "accum_new",
+        "add New Accumulation": "accum_new",
+        "edit 修改配置": "accum_edit",
+        "edit 编辑配置": "accum_edit",
+        "edit Edit Config": "accum_edit",
+    },
+    "accum_edit": {
+        "控制面板": "home",
+        "Dashboard": "home",
+        "dashboard 仪表板": "home",
+        "建仓计划": "home",
+        "Accumulation": "home",
+        "策略列表": "home",
+        "数据分析": "history",
+        "Analytics": "history",
+        "analytics 策略分析": "history",
+        "history 交易历史": "history",
+        "add + 新增层级": "add_level",
+        "add 新增层级": "add_level",
+        "add_circle 添加阶梯": "add_level",
+        "保存更改": "home",
+        "save 保存更改": "home",
+        "保存策略": "home",
+        "取消": "home",
+        "description Reports": "history",
+        "analytics 分析": "history",
+        "account_balance_wallet Strategies": "home",
+        "dashboard 概览": "home",
+        "account_balance_wallet 策略": "home",
+        "description 报告": "history",
+        "settings 设置": "catalog",
+        "person 账户设置": "catalog",
+        "logout 退出登录": "catalog",
+    },
+    "add_level": {
+        "arrow_back 返回加仓策略配置": "accum_edit",
+        "保存层级配置": "accum_edit",
+        "取消": "accum_edit",
+    },
+    "accum_new": {
+        "arrow_back": "home",
+        "确认创建": "home",
+        "取消": "home",
+        "dashboard Dashboard": "home",
+        "layers Accumulation": "home",
+        "analytics Analytics": "history",
+        "visibility Watchlist": "home",
+        "history History": "history",
+    },
+    "dca": {
+        "策略": "dca",
+        "Strategy": "dca",
+        "交易": "home",
+        "Trading": "home",
+        "分析": "history",
+        "Analytics": "history",
+        "Dashboard": "home",
+        "dashboard Dashboard": "home",
+        "dashboard 仪表盘": "home",
+        "visibility Watchlist": "home",
+        "visibility 自选股": "home",
+        "history Strategy History": "history",
+        "history 策略历史": "history",
+        "leaderboard Reports": "history",
+        "leaderboard 报告": "history",
+        "tune Settings": "catalog",
+        "tune 设置": "catalog",
+        "add New Strategy": "dca",
+        "add 新策略": "dca",
+        "保存并启动策略": "home",
+        "play_circle 保存并启动策略": "home",
+        "取消": "home",
+        "查看历史模拟回测": "history",
+        "下载策略白皮书": "catalog",
+        "save": "home",
+        "Markets": "history",
+        "show_chart Markets": "history",
+        "insights Strategies": "dca",
+        "account_balance_wallet Portfolio": "history",
+        "settings Settings": "catalog",
+        "tactic Strategies": "dca",
+        "monitoring Analysis": "history",
+        "account_balance_wallet Wallet": "history",
+        "history History": "history",
+        "home Home": "home",
+        "show_chart Market": "history",
+        "layers Strategy": "home",
+        "person Profile": "catalog",
+    },
+    "history": {
+        "dashboard Dashboard": "home",
+        "account_balance_wallet Portfolio": "history",
+        "receipt_long Transactions": "history",
+        "layers Strategy": "home",
+        "settings Settings": "catalog",
+        "arrow_back": "home",
+        "导出报告": "history",
+        "筛选日期": "history",
+        "查看详细策略": "home",
+    },
+}
+
+GLOBAL_RULES = {
+    "help 技术支持": "catalog",
+    "help 帮助中心": "catalog",
+    "help Support": "catalog",
+    "warning 风险披露": "catalog",
+    "warning Risk Disclosure": "catalog",
+    "操作说明": "catalog",
+    "策略原理": "catalog",
+    "风险提示": "catalog",
+    "Operational Instructions": "catalog",
+    "Strategy Principles": "catalog",
+    "Risk Warnings": "catalog",
+}
+
 
 def safe_unlink(path: Path) -> None:
     if path.exists():
@@ -43,6 +217,67 @@ def homepage_item(site_manifest: list[dict]) -> dict:
     return next(item for item in site_manifest if item["screen_id"] == HOMEPAGE_SCREEN_ID)
 
 
+def group_for_screen(screen_id: str) -> str | None:
+    for group_name, screen_ids in SCREEN_GROUPS.items():
+        if screen_id in screen_ids:
+            return group_name
+    return None
+
+
+def navigation_rules(screen_id: str) -> dict[str, str]:
+    rules = dict(GLOBAL_RULES)
+    group_name = group_for_screen(screen_id)
+    if group_name:
+        rules = {**rules, **GROUP_RULES.get(group_name, {})}
+    return rules
+
+
+def inject_navigation_patch(screen_id: str, raw_html: str) -> str:
+    rules = navigation_rules(screen_id)
+    if not rules:
+        return raw_html
+
+    script = f"""
+<script data-stitch-nav-patch="true">
+(() => {{
+  const routes = {json.dumps(ROUTE_TARGETS, ensure_ascii=False)};
+  const rules = {json.dumps(rules, ensure_ascii=False)};
+  const insidePages = window.location.pathname.includes('/pages/');
+  const normalize = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  const resolveRoute = (targetKey) => {{
+    const route = routes[targetKey];
+    if (!route) return null;
+    return insidePages ? route.page : route.root;
+  }};
+  const bindTarget = (element, href) => {{
+    if (!href) return;
+    if (element.tagName === 'A') {{
+      element.setAttribute('href', href);
+      return;
+    }}
+    element.setAttribute('type', 'button');
+    element.style.cursor = 'pointer';
+    element.addEventListener('click', (event) => {{
+      event.preventDefault();
+      window.location.href = href;
+    }});
+  }};
+
+  document.querySelectorAll('a[href="#"], button').forEach((element) => {{
+    const text = normalize(element.textContent);
+    if (!text) return;
+    const targetKey = rules[text];
+    if (!targetKey) return;
+    bindTarget(element, resolveRoute(targetKey));
+  }});
+}})();
+</script>
+""".strip()
+    if "</body>" in raw_html:
+        return raw_html.replace("</body>", f"{script}\n</body>")
+    return raw_html + script
+
+
 def copy_export_assets(export_manifest: dict) -> list[dict]:
     pages_dir = DOCS_DIR / "pages"
     screenshots_dir = DOCS_DIR / "screenshots"
@@ -64,7 +299,8 @@ def copy_export_assets(export_manifest: dict) -> list[dict]:
         if screen["html_path"]:
             src_html = Path(screen["html_path"])
             dst_html = pages_dir / f"{screen_id}.html"
-            shutil.copy2(src_html, dst_html)
+            raw_html = src_html.read_text(encoding="utf-8")
+            dst_html.write_text(inject_navigation_patch(screen_id, raw_html), encoding="utf-8")
             page_rel = f"pages/{screen_id}.html"
 
         if screen["screenshot_path"]:
@@ -308,7 +544,7 @@ def build_catalog(export_manifest: dict, site_manifest: list[dict]) -> None:
     <section class="hero">
       <div class="panel">
         <h1>Stitch 页面目录</h1>
-        <p>这个目录已经整理成 GitHub Pages 可直接部署的纯静态站点。默认首页已经切换为“股票左侧建仓计算器 - 金字塔比例增强版”，并且发布内容里已经移除了之前的首页草稿页面。</p>
+        <p>这个目录已经整理成 GitHub Pages 可直接部署的纯静态站点。默认首页已经切换为“股票左侧建仓计算器 - 金字塔比例增强版”，并且关键页面之间补上了与 Stitch 原型一致的跳转关系。</p>
         <div class="hero-actions">
           <a class="btn btn-primary" href="./index.html">打开默认封面</a>
           <a class="btn btn-secondary" href="./{homepage["page_url"]}">打开封面源码页</a>
