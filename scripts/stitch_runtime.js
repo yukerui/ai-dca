@@ -421,6 +421,214 @@
     });
   }
 
+  function routeFor(targetKey) {
+    const insidePages = window.location.pathname.includes("/pages/");
+    const routes = {
+      home: {
+        root: "./index.html",
+        page: "75a393ec1a2d424ebafa1d0e59402d26.html",
+      },
+      accum_edit: {
+        root: "./pages/81fee20edb5542f08bb363ac837b327c.html",
+        page: "81fee20edb5542f08bb363ac837b327c.html",
+      },
+      dca: {
+        root: "./pages/530f6fe554444798820046dee4d4b889.html",
+        page: "530f6fe554444798820046dee4d4b889.html",
+      },
+      history: {
+        root: "./pages/65aaf3e700d3443c9810f6c727b045e8.html",
+        page: "65aaf3e700d3443c9810f6c727b045e8.html",
+      },
+      catalog: {
+        root: "./catalog.html",
+        page: "../catalog.html",
+      },
+    };
+    const route = routes[targetKey];
+    if (!route) {
+      return "#";
+    }
+    return insidePages ? route.page : route.root;
+  }
+
+  function isActiveNavItem(element) {
+    const className = String(element.className || "");
+    return (
+      className.includes("border-b-2") ||
+      className.includes("bg-white") ||
+      className.includes("bg-surface-container-low") ||
+      className.includes("bg-[#f2f4f6]") ||
+      className.includes("text-blue-700") ||
+      className.includes("text-[#0058be]") ||
+      className.includes("text-primary")
+    );
+  }
+
+  function findNavLabelNode(element) {
+    const nodes = [...element.querySelectorAll("span, div, p")].filter((node) => {
+      const value = normalize(node.textContent);
+      if (!value) {
+        return false;
+      }
+      return !String(node.className || "").includes("material-symbols-outlined");
+    });
+    return nodes[nodes.length - 1] || null;
+  }
+
+  function setNavItemLabel(element, text) {
+    const label = findNavLabelNode(element);
+    if (label) {
+      label.textContent = text;
+      return;
+    }
+    element.textContent = text;
+  }
+
+  function setNavItemIcon(element, iconName) {
+    if (!iconName) {
+      return;
+    }
+    const icon = element.querySelector(".material-symbols-outlined");
+    if (icon) {
+      icon.textContent = iconName;
+    }
+  }
+
+  function normalizePrimaryTabs(activeKey) {
+    const headerNav = [...document.querySelectorAll("header nav, nav")].find((nav) => {
+      if (!nav.closest("header, nav")) {
+        return false;
+      }
+      return nav.querySelectorAll("a").length >= 3;
+    });
+    if (!headerNav) {
+      return false;
+    }
+
+    const links = [...headerNav.querySelectorAll("a")];
+    if (links.length < 3) {
+      return false;
+    }
+
+    const activeLink = links.find(isActiveNavItem) || links[0];
+    const inactiveLink = links.find((link) => link !== activeLink) || activeLink;
+    const activeClass = String(activeLink.className || "");
+    const inactiveClass = String(inactiveLink.className || "");
+    const specs = [
+      { label: "初始建仓", key: "home", active: activeKey === "home" },
+      { label: "加仓", key: "accum_edit", active: activeKey === "accum_edit" },
+      { label: "定投", key: "dca", active: activeKey === "dca" },
+    ];
+
+    specs.forEach((spec, index) => {
+      const link = links[index];
+      if (!link) {
+        return;
+      }
+      link.textContent = spec.label;
+      link.setAttribute("href", routeFor(spec.key));
+      link.className = spec.active ? activeClass : inactiveClass;
+      link.style.display = "";
+    });
+    links.slice(3).forEach((link) => {
+      link.style.display = "none";
+    });
+    return true;
+  }
+
+  function injectPrimaryTabs(activeKey) {
+    if (document.getElementById("stitch-primary-tabs")) {
+      return;
+    }
+    const main = document.querySelector("main");
+    if (!main) {
+      return;
+    }
+
+    const nav = document.createElement("nav");
+    nav.id = "stitch-primary-tabs";
+    nav.className =
+      "mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur";
+
+    [
+      { label: "初始建仓", key: "home", active: activeKey === "home" },
+      { label: "加仓", key: "accum_edit", active: activeKey === "accum_edit" },
+      { label: "定投", key: "dca", active: activeKey === "dca" },
+    ].forEach((spec) => {
+      const anchor = document.createElement("a");
+      anchor.href = routeFor(spec.key);
+      anchor.textContent = spec.label;
+      anchor.className = spec.active
+        ? "inline-flex min-h-10 items-center rounded-full bg-[#0058be] px-4 text-sm font-bold text-white shadow-sm"
+        : "inline-flex min-h-10 items-center rounded-full border border-slate-200 px-4 text-sm font-medium text-slate-600";
+      nav.appendChild(anchor);
+    });
+
+    main.insertBefore(nav, main.firstChild);
+  }
+
+  function normalizeAccumulationSideNav() {
+    const aside = document.querySelector("aside");
+    if (!aside) {
+      return;
+    }
+
+    [...aside.querySelectorAll("span, div, p")].forEach((node) => {
+      const text = normalize(node.textContent);
+      if (text === "建仓计划" || text === "筹码分布") {
+        node.textContent = "加仓";
+      }
+      if (text === "数据分析") {
+        node.textContent = "策略分析";
+      }
+      if (text === "历史记录" || text === "交易历史") {
+        const row = node.closest("a, button, div");
+        if (row && row !== aside) {
+          row.style.display = "none";
+        }
+      }
+    });
+  }
+
+  function normalizeDcaSideNav() {
+    const asideNav = [...document.querySelectorAll("aside nav")].find((nav) => nav.querySelectorAll("a").length >= 3);
+    if (!asideNav) {
+      return;
+    }
+
+    const items = [...asideNav.querySelectorAll("a")];
+    if (items.length < 3) {
+      return;
+    }
+
+    const activeItem = items.find(isActiveNavItem) || items[0];
+    const inactiveItem = items.find((item) => item !== activeItem) || activeItem;
+    const activeClass = String(activeItem.className || "");
+    const inactiveClass = String(inactiveItem.className || "");
+    const specs = [
+      { label: "定投配置", key: "dca", icon: "tactic", active: true },
+      { label: "收益分析", key: "history", icon: "monitoring", active: false },
+      { label: "风险提示", key: "catalog", icon: "warning", active: false },
+    ];
+
+    specs.forEach((spec, index) => {
+      const item = items[index];
+      if (!item) {
+        return;
+      }
+      item.className = spec.active ? activeClass : inactiveClass;
+      item.setAttribute("href", routeFor(spec.key));
+      item.style.display = "";
+      setNavItemIcon(item, spec.icon);
+      setNavItemLabel(item, spec.label);
+    });
+
+    items.slice(3).forEach((item) => {
+      item.style.display = "none";
+    });
+  }
+
   function setupClassicAccumulationEdit() {
     const priceInputs = findInputsByLabel("入场价格");
     const weightInputs = findInputsByLabel("分配权重");
@@ -1095,6 +1303,7 @@
   function run() {
     ensureRuntimeStyles();
     if (group === "accum_edit") {
+      normalizeAccumulationSideNav();
       setupClassicAccumulationEdit() || setupGridAccumulationEdit() || setupMultiplierAccumulationEdit();
       return;
     }
@@ -1103,6 +1312,8 @@
       return;
     }
     if (group === "dca") {
+      normalizePrimaryTabs("dca") || injectPrimaryTabs("dca");
+      normalizeDcaSideNav();
       setupDcaPlan();
       return;
     }
