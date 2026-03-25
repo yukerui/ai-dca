@@ -16,7 +16,7 @@ function createOcrState(overrides = {}) {
   return {
     status: 'idle',
     progress: 0,
-    message: '等待上传交易截图，浏览器将直接在本地完成 OCR。',
+    message: '等待上传交易截图，前端将直接请求 OCR.Space 完成识别。',
     durationMs: 0,
     error: '',
     lineCount: 0,
@@ -26,7 +26,7 @@ function createOcrState(overrides = {}) {
 
 function getStatusBadgeProps(status) {
   if (status === 'loading') {
-    return { tone: 'warning', icon: 'hourglass_top', label: '本地 OCR 处理中' };
+    return { tone: 'warning', icon: 'hourglass_top', label: 'OCR.Space 处理中' };
   }
 
   if (status === 'error') {
@@ -119,7 +119,7 @@ export function FundSwitchExperience({ screen, links }) {
     setOcrState(createOcrState({
       status: 'loading',
       progress: 12,
-      message: '准备本地 OCR 引擎'
+      message: '准备上传到 OCR.Space'
     }));
 
     try {
@@ -150,7 +150,7 @@ export function FundSwitchExperience({ screen, links }) {
           progress: 100,
           durationMs: result.durationMs,
           lineCount: result.lines.length,
-          message: `本地 OCR 完成，已解析 ${result.rows.length} 条交易记录。`
+          message: `OCR.Space 识别完成，已解析 ${result.rows.length} 条交易记录。`
         }));
       } else {
         setOcrState(createOcrState({
@@ -165,8 +165,8 @@ export function FundSwitchExperience({ screen, links }) {
       setOcrState(createOcrState({
         status: 'error',
         progress: 0,
-        error: error instanceof Error ? error.message : '本地 OCR 失败，请更换更清晰的截图重试。',
-        message: '本地 OCR 失败'
+        error: error instanceof Error ? error.message : 'OCR.Space 识别失败，请更换更清晰的截图重试。',
+        message: 'OCR.Space 识别失败'
       }));
     }
   }
@@ -246,7 +246,7 @@ export function FundSwitchExperience({ screen, links }) {
       <section className="page-header">
         <div>
           <h1 className="page-title page-title--compact">基金切换收益助手</h1>
-          <p className="page-subtitle">使用 onnxruntime-web + PaddleOCR 模型在浏览器本地识别交易截图，并自动回填切换收益计算参数。</p>
+          <p className="page-subtitle">使用 OCR.Space 识别交易截图，并自动回填切换收益计算参数。</p>
         </div>
         <StatusBadge icon={badge.icon} tone={badge.tone}>{badge.label}</StatusBadge>
       </section>
@@ -272,7 +272,7 @@ export function FundSwitchExperience({ screen, links }) {
                 <MaterialIcon className="upload-dropzone__icon-symbol" name={ocrState.status === 'loading' ? 'hourglass_top' : 'cloud_upload'} />
               </div>
               <div className="upload-dropzone__title">点击或拖拽上传交易截图</div>
-              <div className="upload-dropzone__copy">支持 PNG / JPG / JPEG / WebP，OCR 完全在本地浏览器执行。</div>
+              <div className="upload-dropzone__copy">支持 PNG / JPG / JPEG / WebP，图片会直接发送到 OCR.Space 进行识别。</div>
               <div className="upload-dropzone__hint">{ocrState.message}</div>
             </button>
           </SurfaceCard>
@@ -301,7 +301,7 @@ export function FundSwitchExperience({ screen, links }) {
                     ? ocrState.error
                     : ocrState.status === 'success' || ocrState.status === 'warning'
                       ? `识别到 ${ocrState.lineCount} 行文字，解析出 ${Math.max(state.recognizedRecords, 0)} 条交易记录`
-                      : '上传后会自动尝试解析日期、基金代码、买卖方向、单价和份额'}
+                      : '上传后会自动尝试解析日期、基金名称、买卖方向、单价和份额'}
                 </span>
               </div>
               <MaterialIcon className="ocr-file__check" filled name={ocrState.status === 'error' ? 'error' : ocrState.status === 'loading' ? 'hourglass_top' : 'check_circle'} />
@@ -330,7 +330,7 @@ export function FundSwitchExperience({ screen, links }) {
               </div>
               <div className="summary-lines__row">
                 <span>OCR 耗时</span>
-                <strong>{ocrState.durationMs ? `${ocrState.durationMs} ms` : '等待识别'}</strong>
+                <strong>{ocrState.durationMs ? `${ocrState.durationMs} ms` : '等待 OCR.Space'}</strong>
               </div>
             </div>
             <div className="promo-card__action">
@@ -347,13 +347,13 @@ export function FundSwitchExperience({ screen, links }) {
             </div>
             <div className="field-grid field-grid--2">
               <label className="field">
-                <span className="field__label">原基金代码</span>
+                <span className="field__label">原基金代码 / 名称</span>
                 <div className="field__input-shell">
                   <input type="text" value={summary.comparison.sourceCode} onChange={(event) => updateComparison('sourceCode', event.target.value)} />
                 </div>
               </label>
               <label className="field">
-                <span className="field__label">现基金代码</span>
+                <span className="field__label">现基金代码 / 名称</span>
                 <div className="field__input-shell">
                   <input type="text" value={summary.comparison.targetCode} onChange={(event) => updateComparison('targetCode', event.target.value)} />
                 </div>
