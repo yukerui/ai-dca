@@ -1,15 +1,18 @@
 import { TopTabs } from './TopTabs.jsx';
 import { SideNav } from './SideNav.jsx';
 
-export function AppShell({ activeTab, sideNav, headerMeta, children }) {
+export function AppShell({ activeTab, tabs, sideNav, headerMeta, screen, children }) {
+  const shellClass = screen?.device === 'MOBILE' ? 'app-shell is-mobile' : 'app-shell';
+  const eyebrow = screen?.device === 'MOBILE' ? '移动端策略页' : '投资策略面板';
+
   return (
-    <div className="app-shell">
+    <div className={shellClass}>
       <SideNav {...sideNav} />
       <div className="app-shell__main">
         <header className="app-header">
           <div>
-            <div className="app-header__eyebrow">投资策略面板</div>
-            <TopTabs activeKey={activeTab} />
+            <div className="app-header__eyebrow">{eyebrow}</div>
+            <TopTabs activeKey={activeTab} tabs={tabs} />
           </div>
           <div className="app-header__meta">
             {headerMeta?.map((item) => (

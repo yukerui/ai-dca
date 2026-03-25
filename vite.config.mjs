@@ -11,8 +11,8 @@ export default defineConfig({
     assetsDir: 'react-assets',
     rollupOptions: {
       input: {
-        'pages/81fee20edb5542f08bb363ac837b327c': resolve(__dirname, 'frontend/81fee20edb5542f08bb363ac837b327c.html'),
-        'pages/65aaf3e700d3443c9810f6c727b045e8': resolve(__dirname, 'frontend/65aaf3e700d3443c9810f6c727b045e8.html')
+        page: resolve(__dirname, 'frontend/page.html'),
+        catalog: resolve(__dirname, 'frontend/catalog.html')
       }
     }
   }

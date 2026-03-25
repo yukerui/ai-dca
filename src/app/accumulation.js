@@ -9,6 +9,12 @@ export const defaultAccumulationState = {
   weights: [20, 30, 50]
 };
 
+function sanitizeWeights(weights) {
+  const base = Array.isArray(weights) && weights.length ? weights : defaultAccumulationState.weights;
+  const next = base.map((weight) => Math.max(Number(weight) || 0, 0));
+  return next.some((weight) => weight > 0) ? next : [...defaultAccumulationState.weights];
+}
+
 export function round(value, digits = 2) {
   const factor = 10 ** digits;
   return Math.round((Number(value) || 0) * factor) / factor;
@@ -29,28 +35,33 @@ export function formatCurrency(value, currency = '$', digits = 2) {
 }
 
 export function formatPercent(value, digits = 1, keepSign = false) {
-  const amount = round(value, digits).toFixed(digits).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
+  const amount = round(value, digits)
+    .toFixed(digits)
+    .replace(/\.0+$/, '')
+    .replace(/(\.\d*[1-9])0+$/, '$1');
   const prefix = keepSign && Number(value) > 0 ? '+' : '';
   return `${prefix}${amount}%`;
 }
 
 export function buildStages({ totalCapital, basePrice, maxDrawdown, weights }) {
-  const safeWeights = weights.map((weight) => Math.max(Number(weight) || 0, 0));
+  const safeWeights = sanitizeWeights(weights);
   const totalWeight = safeWeights.reduce((sum, weight) => sum + weight, 0) || 1;
-  const trailingWeights = safeWeights.slice(1);
-  const trailingTotal = trailingWeights.reduce((sum, weight) => sum + weight, 0);
-  let cumulative = 0;
+  const trailingTotal = safeWeights.slice(1).reduce((sum, weight) => sum + weight, 0);
+  let cumulativeTrailingWeight = 0;
 
   const stages = safeWeights.map((weight, index) => {
     let drawdown = 0;
+
     if (index > 0) {
-      cumulative += weight;
-      const ratio = trailingTotal > 0 ? cumulative / trailingTotal : index / Math.max(safeWeights.length - 1, 1);
-      drawdown = maxDrawdown * ratio;
+      cumulativeTrailingWeight += weight;
+      const ratio = trailingTotal > 0
+        ? cumulativeTrailingWeight / trailingTotal
+        : index / Math.max(safeWeights.length - 1, 1);
+      drawdown = (Number(maxDrawdown) || 0) * ratio;
     }
 
-    const price = basePrice * (1 - drawdown / 100);
-    const amount = totalCapital * (weight / totalWeight);
+    const price = (Number(basePrice) || 0) * (1 - drawdown / 100);
+    const amount = (Number(totalCapital) || 0) * (weight / totalWeight);
     const shares = price > 0 ? amount / price : 0;
 
     return {
@@ -68,7 +79,7 @@ export function buildStages({ totalCapital, basePrice, maxDrawdown, weights }) {
 
   const investedCapital = stages.reduce((sum, stage) => sum + stage.amount, 0);
   const totalShares = stages.reduce((sum, stage) => sum + stage.shares, 0);
-  const averageCost = totalShares > 0 ? investedCapital / totalShares : basePrice;
+  const averageCost = totalShares > 0 ? investedCapital / totalShares : Number(basePrice) || 0;
 
   return {
     stages,
@@ -79,6 +90,18 @@ export function buildStages({ totalCapital, basePrice, maxDrawdown, weights }) {
   };
 }
 
+function readSavedWeights(saved) {
+  if (Array.isArray(saved?.weights) && saved.weights.length) {
+    return saved.weights;
+  }
+
+  if (Array.isArray(saved?.stages) && saved.stages.length) {
+    return saved.stages.map((stage) => stage.weight ?? stage.weightPercent ?? 0);
+  }
+
+  return defaultAccumulationState.weights;
+}
+
 export function readAccumulationState() {
   if (typeof window === 'undefined') {
     return defaultAccumulationState;
@@ -86,37 +109,47 @@ export function readAccumulationState() {
 
   try {
     const saved = JSON.parse(window.localStorage.getItem(ACCUMULATION_KEY) || 'null');
-    if (!saved || !Array.isArray(saved.stages) || !saved.stages.length) {
+    if (!saved) {
       return defaultAccumulationState;
     }
 
     return {
       symbol: saved.symbol || defaultAccumulationState.symbol,
       frequency: saved.frequency || defaultAccumulationState.frequency,
-      totalCapital: saved.totalCapital || defaultAccumulationState.totalCapital,
-      basePrice: saved.basePrice || defaultAccumulationState.basePrice,
-      maxDrawdown: saved.maxDrawdown || defaultAccumulationState.maxDrawdown,
-      weights: saved.stages.map((stage) => stage.weight || stage.weightPercent || 0)
+      totalCapital: Number(saved.totalCapital) || defaultAccumulationState.totalCapital,
+      basePrice: Number(saved.basePrice) || defaultAccumulationState.basePrice,
+      maxDrawdown: Number(saved.maxDrawdown) || defaultAccumulationState.maxDrawdown,
+      weights: sanitizeWeights(readSavedWeights(saved))
     };
   } catch (_error) {
     return defaultAccumulationState;
   }
 }
 
-export function persistAccumulationState(state, computed) {
+export function persistAccumulationState(state, computed = buildStages(state)) {
   if (typeof window === 'undefined') {
     return;
   }
 
+  const safeState = {
+    symbol: state.symbol || defaultAccumulationState.symbol,
+    frequency: state.frequency || defaultAccumulationState.frequency,
+    totalCapital: Number(state.totalCapital) || 0,
+    basePrice: Number(state.basePrice) || 0,
+    maxDrawdown: Number(state.maxDrawdown) || 0,
+    weights: sanitizeWeights(state.weights)
+  };
+
   const payload = {
-    source: 'accum_edit',
-    symbol: state.symbol,
-    frequency: state.frequency,
+    source: 'react-accumulation',
+    symbol: safeState.symbol,
+    frequency: safeState.frequency,
     currency: '$',
-    totalCapital: round(state.totalCapital, 2),
-    basePrice: round(state.basePrice, 2),
-    maxDrawdown: round(state.maxDrawdown, 2),
+    totalCapital: round(safeState.totalCapital, 2),
+    basePrice: round(safeState.basePrice, 2),
+    maxDrawdown: round(safeState.maxDrawdown, 2),
     averageCost: round(computed.averageCost, 2),
+    weights: safeState.weights.map((weight) => round(weight, 4)),
     stages: computed.stages.map((stage) => ({
       ...stage,
       price: round(stage.price, 2),
