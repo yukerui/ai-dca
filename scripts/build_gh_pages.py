@@ -10,8 +10,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 EXPORT_DIR = ROOT / "stitch-export" / "project-4075224789216868860-latest"
 DOCS_DIR = ROOT / "docs"
+RUNTIME_SRC = ROOT / "scripts" / "stitch_runtime.js"
+RUNTIME_ASSET_NAME = "stitch-runtime.js"
 HOMEPAGE_SCREEN_ID = "75a393ec1a2d424ebafa1d0e59402d26"
 EXCLUDED_TITLE_KEYWORDS = ("投资计划极简首页",)
+RUNTIME_GROUPS = {"home", "accum_edit", "accum_new", "dca"}
 
 ROUTE_TARGETS = {
     "home": {"root": "./index.html", "page": "75a393ec1a2d424ebafa1d0e59402d26.html"},
@@ -232,6 +235,24 @@ def navigation_rules(screen_id: str) -> dict[str, str]:
     return rules
 
 
+def append_before_body(raw_html: str, addition: str) -> str:
+    if "</body>" in raw_html:
+        return raw_html.replace("</body>", f"{addition}\n</body>")
+    return raw_html + addition
+
+
+def inject_runtime_patch(screen_id: str, raw_html: str) -> str:
+    group_name = group_for_screen(screen_id)
+    if group_name not in RUNTIME_GROUPS:
+        return raw_html
+
+    script = (
+        f'<script defer data-stitch-runtime="true" data-group="{html.escape(group_name)}" '
+        f'src="../assets/{RUNTIME_ASSET_NAME}"></script>'
+    )
+    return append_before_body(raw_html, script)
+
+
 def inject_navigation_patch(screen_id: str, raw_html: str) -> str:
     rules = navigation_rules(screen_id)
     if not rules:
@@ -243,7 +264,7 @@ def inject_navigation_patch(screen_id: str, raw_html: str) -> str:
   const routes = {json.dumps(ROUTE_TARGETS, ensure_ascii=False)};
   const rules = {json.dumps(rules, ensure_ascii=False)};
   const insidePages = window.location.pathname.includes('/pages/');
-  const normalize = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
   const resolveRoute = (targetKey) => {{
     const route = routes[targetKey];
     if (!route) return null;
@@ -273,9 +294,13 @@ def inject_navigation_patch(screen_id: str, raw_html: str) -> str:
 }})();
 </script>
 """.strip()
-    if "</body>" in raw_html:
-        return raw_html.replace("</body>", f"{script}\n</body>")
-    return raw_html + script
+    return append_before_body(raw_html, script)
+
+
+def copy_runtime_asset() -> None:
+    assets_dir = DOCS_DIR / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(RUNTIME_SRC, assets_dir / RUNTIME_ASSET_NAME)
 
 
 def copy_export_assets(export_manifest: dict) -> list[dict]:
@@ -300,7 +325,9 @@ def copy_export_assets(export_manifest: dict) -> list[dict]:
             src_html = Path(screen["html_path"])
             dst_html = pages_dir / f"{screen_id}.html"
             raw_html = src_html.read_text(encoding="utf-8")
-            dst_html.write_text(inject_navigation_patch(screen_id, raw_html), encoding="utf-8")
+            raw_html = inject_runtime_patch(screen_id, raw_html)
+            raw_html = inject_navigation_patch(screen_id, raw_html)
+            dst_html.write_text(raw_html, encoding="utf-8")
             page_rel = f"pages/{screen_id}.html"
 
         if screen["screenshot_path"]:
@@ -348,7 +375,10 @@ box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
 def build_homepage(site_manifest: list[dict]) -> None:
     homepage = homepage_item(site_manifest)
     homepage_src = DOCS_DIR / homepage["page_url"]
-    homepage_html = homepage_src.read_text(encoding="utf-8")
+    homepage_html = homepage_src.read_text(encoding="utf-8").replace(
+        f"../assets/{RUNTIME_ASSET_NAME}",
+        f"./assets/{RUNTIME_ASSET_NAME}",
+    )
     (DOCS_DIR / "index.html").write_text(inject_catalog_link(homepage_html), encoding="utf-8")
 
 
@@ -633,6 +663,7 @@ def main() -> None:
     export_manifest = read_export_manifest()
     safe_unlink(DOCS_DIR)
     DOCS_DIR.mkdir(parents=True, exist_ok=True)
+    copy_runtime_asset()
     site_manifest = copy_export_assets(export_manifest)
     build_homepage(site_manifest)
     build_catalog(export_manifest, site_manifest)
