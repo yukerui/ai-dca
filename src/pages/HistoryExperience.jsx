@@ -1,13 +1,22 @@
 import { buildStages, formatCurrency, readAccumulationState } from '../app/accumulation.js';
 import { createTopTabs } from '../app/screens.js';
-import { AppShell } from '../components/AppShell.jsx';
-import { StatCard } from '../components/StatCard.jsx';
+import { MaterialIcon } from '../components/MaterialIcon.jsx';
+import { MetricCard, SurfaceCard, WorkspaceShell } from '../components/PageChrome.jsx';
 
 const sampleHistory = [
-  { date: '2026-03-22', type: '买入', shares: 8.4, price: 573.18, status: '已成交' },
-  { date: '2026-03-15', type: '买入', shares: 9.7, price: 559.21, status: '已成交' },
-  { date: '2026-03-01', type: '买入', shares: 10.2, price: 601.3, status: '已成交' },
-  { date: '2026-02-11', type: '观察', shares: 0, price: 548.4, status: '未触发' }
+  { date: '2024-03-25', type: '买入', shares: 10, price: 445.2, status: '已提交' },
+  { date: '2024-03-18', type: '买入', shares: 15, price: 431.1, status: '已提交' },
+  { date: '2024-03-11', type: '卖出', shares: 5, price: 445.5, status: '已完成' },
+  { date: '2024-03-04', type: '买入', shares: 22, price: 425.8, status: '已提交' },
+  { date: '2024-02-26', type: '买入', shares: 12, price: 432.4, status: '已提交' }
+];
+
+const SIDEBAR_ITEMS = [
+  { label: 'Dashboard', icon: 'dashboard' },
+  { label: 'Portfolio', icon: 'account_balance_wallet' },
+  { label: 'Transactions', icon: 'receipt_long' },
+  { label: 'Strategy', icon: 'monitoring', active: true },
+  { label: 'Settings', icon: 'settings' }
 ];
 
 export function HistoryExperience({ screen, links, inPagesDir }) {
@@ -18,115 +27,126 @@ export function HistoryExperience({ screen, links, inPagesDir }) {
   const tabs = createTopTabs({ inPagesDir });
 
   return (
-    <AppShell
+    <WorkspaceShell
       activeTab="accumEdit"
       tabs={tabs}
-      sideNav={{
-        title: '历史模块',
-        subtitle: '执行记录同步',
-        items: [
-          { label: '策略总览', icon: '▣', href: links.home },
-          { label: '加仓配置', icon: '◉', href: links.accumEdit },
-          { label: '交易历史', icon: '↺', href: links.history, active: true },
-          { label: '定投计划', icon: '◌', href: links.dca },
-          { label: '页面目录', icon: '☰', href: links.catalog }
-        ],
-        footer: <a className="side-nav__cta" href={links.accumEdit}>返回加仓配置</a>
-      }}
-      headerMeta={[
-        { label: '标的', value: accumulationState.symbol },
-        { label: '记录数', value: `${sampleHistory.length} 条` },
-        { label: '状态', value: '已同步' }
-      ]}
-      screen={screen}
+      headerRight={
+        <>
+          <button className="icon-button" type="button">
+            <MaterialIcon className="icon-button__icon" name="search" />
+          </button>
+          <button className="icon-button" type="button">
+            <MaterialIcon className="icon-button__icon" name="notifications" />
+          </button>
+          <div className="avatar">AT</div>
+        </>
+      }
+      sidebar={
+        <>
+          <div className="sidebar-brand-card">
+            <div className="sidebar-brand-card__mark">
+              <MaterialIcon filled name="account_balance" />
+            </div>
+            <div>
+              <div className="sidebar-brand-card__title">Axiom Trade</div>
+              <div className="sidebar-brand-card__meta">Financial Architect</div>
+            </div>
+          </div>
+
+          <div className="sidebar-menu">
+            {SIDEBAR_ITEMS.map((item) => (
+              <a key={item.label} className={item.active ? 'sidebar-menu__item is-active' : 'sidebar-menu__item'} href={links.history}>
+                <MaterialIcon className="sidebar-menu__icon" name={item.icon} />
+                <span>{item.label}</span>
+              </a>
+            ))}
+          </div>
+
+          <div className="sidebar-footer">
+            <a className="button-primary button-full" href={links.accumNew}>
+              <MaterialIcon className="icon-button__icon" name="add" />
+              New Transaction
+            </a>
+          </div>
+        </>
+      }
     >
-      <section className="page-section page-section--hero">
+      <section className="page-header">
         <div>
-          <div className="page-eyebrow">交易历史页</div>
-          <h1 className="page-title">{screen.title}</h1>
-          <p className="page-copy">历史页和加仓配置页共用一套壳层与导航配置。交易摘要读取同一份加仓状态，所以预算、平均成本和层级数量能保持同步。</p>
-        </div>
-        <div className="hero-grid">
-          <StatCard label="累计股数" value={`${totalShares.toFixed(2)} 股`} note="基于最近交易记录" tone="primary" />
-          <StatCard label="累计金额" value={formatCurrency(totalInvestment)} note="历史记录中的已执行交易" />
-          <StatCard label="当前平均成本" value={formatCurrency(accumulation.averageCost)} note={`当前共 ${accumulation.stages.length} 层`} />
+          <div className="page-breadcrumb">
+            <MaterialIcon className="icon-button__icon" name="arrow_back" />
+            <span>QQQ 交易历史</span>
+          </div>
+          <h1 className="page-title page-title--compact">{screen.title}</h1>
         </div>
       </section>
 
-      <section className="panel panel--table">
-        <div className="panel__header">
+      <section className="history-stats">
+        <MetricCard label="总累积股数" note="最近执行记录汇总" value={`${totalShares.toFixed(2)} 股`} />
+        <MetricCard label="平均买入价格" note="历史成交均价" value={formatCurrency(totalInvestment / Math.max(totalShares, 1))} />
+        <MetricCard accent="primary" label="总购买金额" note="共享建仓状态同步" value={formatCurrency(totalInvestment)} />
+      </section>
+
+      <SurfaceCard>
+        <div className="section-header">
           <div>
-            <div className="panel__eyebrow">交易明细</div>
-            <h2 className="panel__title">最近执行记录</h2>
+            <div className="section-eyebrow">历史记录</div>
+            <h2 className="section-title">最近执行记录</h2>
           </div>
-          <div className="button-row">
-            <button className="ghost-button" type="button">导出报告</button>
-            <button className="ghost-button" type="button">筛选日期</button>
+          <div className="page-header__actions">
+            <button className="button-secondary" type="button">年份筛选</button>
+            <button className="button-secondary" type="button">筛选日期</button>
           </div>
         </div>
-        <table className="data-table">
+        <table className="history-table">
           <thead>
             <tr>
               <th>日期</th>
               <th>类型</th>
               <th>数量</th>
-              <th>价格</th>
-              <th>金额</th>
+              <th>单价</th>
+              <th>总金额</th>
               <th>状态</th>
             </tr>
           </thead>
           <tbody>
             {sampleHistory.map((row) => (
-              <tr key={`${row.date}-${row.type}`}>
+              <tr key={`${row.date}-${row.type}-${row.price}`}>
                 <td>{row.date}</td>
                 <td>{row.type}</td>
-                <td>{row.shares > 0 ? `${row.shares.toFixed(2)} 股` : '-'}</td>
+                <td>{`${row.shares.toFixed(2)} 股`}</td>
                 <td>{formatCurrency(row.price)}</td>
-                <td>{row.shares > 0 ? formatCurrency(row.shares * row.price) : '-'}</td>
-                <td>{row.status}</td>
+                <td>{formatCurrency(row.shares * row.price)}</td>
+                <td>
+                  <span className={row.type === '卖出' ? 'history-table__status history-table__status--watch' : 'history-table__status history-table__status--buy'}>
+                    {row.status}
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </section>
+        <div className="table-note" style={{ marginTop: 12 }}>显示 1-5 条，共 {sampleHistory.length} 条记录</div>
+      </SurfaceCard>
 
-      <div className="content-grid content-grid--history">
-        <section className="panel">
-          <div className="panel__header">
-            <div>
-              <div className="panel__eyebrow">当前层级</div>
-              <h2 className="panel__title">最新加仓模型快照</h2>
-            </div>
+      <section className="history-bottom">
+        <SurfaceCard className="dark-promo">
+          <div className="section-eyebrow">价值趋势分析</div>
+          <h2 className="promo-card__title">价值趋势分析</h2>
+          <p className="promo-card__copy">查看您在不同买入区间的执行密度，以及历史成交对当前平均成本的影响。</p>
+        </SurfaceCard>
+
+        <SurfaceCard className="promo-blue">
+          <div className="section-eyebrow">金字塔加仓建议</div>
+          <h2 className="promo-card__title">金字塔加仓建议</h2>
+          <p className="promo-card__copy">
+            基于您过去 5 次买入操作，当前阶段性加仓仍然偏向第二和第三层。建议保留对 {formatCurrency(accumulation.stages[1]?.price ?? accumulationState.basePrice)} 的观察仓位。
+          </p>
+          <div className="promo-card__action">
+            <a className="button-secondary" href={links.accumEdit}>查看当前建仓计划</a>
           </div>
-          <div className="schedule-list">
-            {accumulation.stages.map((stage) => (
-              <div key={stage.id} className="schedule-item">
-                <div>
-                  <strong>{stage.label}</strong>
-                  <span>{formatCurrency(stage.price)} · {stage.weightPercent.toFixed(1)}%</span>
-                </div>
-                <div>
-                  <strong>{formatCurrency(stage.amount)}</strong>
-                  <span>{formatCurrency(stage.shares, '', 3)} 股</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-        <section className="panel">
-          <div className="panel__header">
-            <div>
-              <div className="panel__eyebrow">统一结构</div>
-              <h2 className="panel__title">迁移后的行为</h2>
-            </div>
-          </div>
-          <ul className="bullet-list">
-            <li>顶栏主 tab 与加仓配置页完全一致，页面切换时不再出现不同的导航体系。</li>
-            <li>交易历史摘要直接读取共享加仓状态，预算和平均成本会随配置页联动更新。</li>
-            <li>当前版本：{screen.title}。后续新增页面只需要补充屏幕元数据，不需要再复制整页 HTML。</li>
-          </ul>
-        </section>
-      </div>
-    </AppShell>
+        </SurfaceCard>
+      </section>
+    </WorkspaceShell>
   );
 }

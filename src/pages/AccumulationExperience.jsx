@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { buildStages, formatCurrency, formatPercent, persistAccumulationState, readAccumulationState, round } from '../app/accumulation.js';
 import { createTopTabs } from '../app/screens.js';
 import { NumberField, SelectField } from '../components/FormFields.jsx';
-import { AppShell } from '../components/AppShell.jsx';
-import { StatCard } from '../components/StatCard.jsx';
+import { MaterialIcon } from '../components/MaterialIcon.jsx';
+import { StatusBadge, SurfaceCard, WorkspaceShell } from '../components/PageChrome.jsx';
 
 const frequencyOptions = ['每日', '每周', '每月', '每季'];
 
@@ -11,138 +11,196 @@ export function AccumulationExperience({ screen, links, inPagesDir }) {
   const [state, setState] = useState(() => readAccumulationState());
   const computed = useMemo(() => buildStages(state), [state]);
   const tabs = createTopTabs({ inPagesDir });
-  const nextBuyPrice = computed.stages[1]?.price ?? computed.stages[0]?.price ?? state.basePrice;
-  const riskNote = computed.stages.length > 2
-    ? `末层最大跌幅 ${formatPercent(state.maxDrawdown, 2)}，权重变化会自动重算每层入场价格。`
-    : '建议至少保留三层加仓，避免过早打满仓位。';
 
   useEffect(() => {
     persistAccumulationState(state, computed);
   }, [state, computed]);
 
   return (
-    <AppShell
+    <WorkspaceShell
       activeTab="accumEdit"
       tabs={tabs}
-      sideNav={{
-        title: '加仓模块',
-        subtitle: '权重联动模型',
-        items: [
-          { label: '策略总览', icon: '▣', href: links.home },
-          { label: '加仓配置', icon: '◉', href: links.accumEdit, active: true },
-          { label: '新增层级', icon: '+', href: links.addLevel },
-          { label: '交易历史', icon: '↺', href: links.history },
-          { label: '页面目录', icon: '☰', href: links.catalog }
-        ],
-        footer: <a className="side-nav__cta" href={links.addLevel}>新增层级</a>
-      }}
-      headerMeta={[
-        { label: '标的', value: state.symbol },
-        { label: '再平衡', value: state.frequency },
-        { label: '末层跌幅', value: formatPercent(state.maxDrawdown, 2) }
-      ]}
-      screen={screen}
+      headerRight={
+        <>
+          <button className="icon-button" type="button">
+            <MaterialIcon className="icon-button__icon" name="light_mode" />
+          </button>
+          <button className="icon-button" type="button">
+            <MaterialIcon className="icon-button__icon" name="notifications" />
+          </button>
+          <div className="avatar">AT</div>
+        </>
+      }
+      sidebar={
+        <>
+          <div className="sidebar-brand-card">
+            <div className="sidebar-brand-card__mark">
+              <MaterialIcon filled name="query_stats" />
+            </div>
+            <div>
+              <div className="sidebar-brand-card__title">策略编辑器</div>
+              <div className="sidebar-brand-card__meta">金字塔增长</div>
+            </div>
+          </div>
+
+          <div className="sidebar-menu">
+            <a className="sidebar-menu__item is-active" href={links.accumEdit}>
+              <MaterialIcon className="sidebar-menu__icon" filled name="layers" />
+              <span>加仓配置</span>
+            </a>
+            <a className="sidebar-menu__item" href={links.history}>
+              <MaterialIcon className="sidebar-menu__icon" name="insights" />
+              <span>数据分析</span>
+            </a>
+            <a className="sidebar-menu__item" href={links.addLevel}>
+              <MaterialIcon className="sidebar-menu__icon" name="add_chart" />
+              <span>新增层级</span>
+            </a>
+          </div>
+        </>
+      }
     >
-      <section className="page-section page-section--hero">
-        <div>
-          <div className="page-eyebrow">加仓编辑页</div>
-          <h1 className="page-title">{screen.title}</h1>
-          <p className="page-copy">首笔价格作为基准价，后续层级会按照累计权重占比分配跌幅，并同步计算入场价格、计划金额和股数。</p>
-        </div>
-        <div className="hero-grid">
-          <StatCard label="计划总预算" value={formatCurrency(state.totalCapital)} note="用于当前金字塔加仓模型" tone="primary" />
-          <StatCard label="预估平均成本" value={formatCurrency(computed.averageCost)} note={`总权重 ${formatPercent(computed.totalWeight, 2)}`} />
-          <StatCard label="下次买入价" value={formatCurrency(nextBuyPrice)} note={riskNote} />
-        </div>
-      </section>
-
-      <div className="content-grid">
-        <section className="panel">
-          <div className="panel__header">
-            <div>
-              <div className="panel__eyebrow">基本参数</div>
-              <h2 className="panel__title">全局设置</h2>
-            </div>
-          </div>
-          <div className="field-grid">
-            <NumberField label="初始投资额" prefix="$" value={state.totalCapital} onChange={(event) => setState((current) => ({ ...current, totalCapital: Number(event.target.value) || 0 }))} />
-            <NumberField label="首笔价格" prefix="$" value={state.basePrice} onChange={(event) => setState((current) => ({ ...current, basePrice: Number(event.target.value) || 0 }))} />
-            <NumberField label="末层最大跌幅" suffix="%" value={state.maxDrawdown} onChange={(event) => setState((current) => ({ ...current, maxDrawdown: Number(event.target.value) || 0 }))} helper="最后一层会吃满最大跌幅。" />
-            <SelectField label="再平衡频率" value={state.frequency} onChange={(event) => setState((current) => ({ ...current, frequency: event.target.value }))} options={frequencyOptions} />
-          </div>
-          <div className="panel__footer-text">当前页面版本：{screen.title}</div>
-        </section>
-
-        <section className="panel">
-          <div className="panel__header">
-            <div>
-              <div className="panel__eyebrow">目标跌幅加仓点</div>
-              <h2 className="panel__title">权重联动入场价格</h2>
-            </div>
-            <div className="button-row">
-              <a className="ghost-button" href={links.addLevel}>新增层级</a>
-            </div>
-          </div>
-          <div className="stage-list">
-            {computed.stages.map((stage, index) => (
-              <article key={stage.id} className={index === 0 ? 'stage-card is-primary' : 'stage-card'}>
-                <div className="stage-card__index">{String(index + 1).padStart(2, '0')}</div>
-                <div className="stage-card__fields">
-                  <NumberField
-                    label="分配权重"
-                    suffix="%"
-                    step="1"
-                    value={state.weights[index] ?? 0}
-                    onChange={(event) => {
-                      const nextWeights = [...state.weights];
-                      nextWeights[index] = Number(event.target.value) || 0;
-                      setState((current) => ({ ...current, weights: nextWeights }));
-                    }}
-                  />
-                  <NumberField label="入场价格" prefix="$" value={round(stage.price, 2)} readOnly onChange={() => {}} />
-                  <NumberField label="计划金额" prefix="$" value={round(stage.amount, 2)} readOnly onChange={() => {}} />
-                </div>
-                <div className="stage-card__meta">
-                  <span>{index === 0 ? '首笔基准层' : `目标跌幅 ${formatPercent(stage.drawdown, 2)}`}</span>
-                  <strong>{formatCurrency(stage.shares, '', 3)} 股</strong>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
+      <div className="page-breadcrumb">
+        <a href={links.home}>策略列表</a>
+        <MaterialIcon className="icon-button__icon" name="chevron_right" />
+        <span>QQQ 建仓策略</span>
       </div>
 
-      <section className="panel panel--table">
-        <div className="panel__header">
-          <div>
-            <div className="panel__eyebrow">执行摘要</div>
-            <h2 className="panel__title">分层资金配置</h2>
-          </div>
-          <a className="ghost-button" href={links.history}>查看交易历史</a>
+      <section className="page-header">
+        <div>
+          <h1 className="page-title page-title--compact">修改策略配置 - QQQ</h1>
+          <p className="page-subtitle">纳斯达克100指数ETF金字塔式建仓方案</p>
         </div>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>阶段</th>
-              <th>权重</th>
-              <th>跌幅</th>
-              <th>入场价格</th>
-              <th>计划金额</th>
-            </tr>
-          </thead>
-          <tbody>
-            {computed.stages.map((stage, index) => (
-              <tr key={stage.id}>
-                <td>{stage.label}</td>
-                <td>{formatPercent(stage.weightPercent, 1)}</td>
-                <td>{index === 0 ? '基准' : formatPercent(stage.drawdown, 2)}</td>
-                <td>{formatCurrency(stage.price)}</td>
-                <td>{formatCurrency(stage.amount)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <StatusBadge>正在运行</StatusBadge>
       </section>
-    </AppShell>
+
+      <section className="content-split content-split--wide">
+        <SurfaceCard>
+          <div className="section-header">
+            <div>
+              <div className="section-eyebrow">基本参数设置</div>
+              <h2 className="section-title">基本参数设置</h2>
+            </div>
+          </div>
+
+          <div className="field-grid field-grid--2">
+            <NumberField
+              label="初始投资额"
+              prefix="$"
+              value={state.totalCapital}
+              onChange={(event) => setState((current) => ({ ...current, totalCapital: Number(event.target.value) || 0 }))}
+            />
+            <NumberField
+              label="首笔价格"
+              prefix="$"
+              value={state.basePrice}
+              onChange={(event) => setState((current) => ({ ...current, basePrice: Number(event.target.value) || 0 }))}
+            />
+            <SelectField
+              label="再平衡频率"
+              value={state.frequency}
+              onChange={(event) => setState((current) => ({ ...current, frequency: event.target.value }))}
+              options={frequencyOptions}
+              helper="系统将在预定时间检查价格并执行加仓动作。"
+            />
+            <NumberField
+              label="末层最大跌幅"
+              suffix="%"
+              value={state.maxDrawdown}
+              onChange={(event) => setState((current) => ({ ...current, maxDrawdown: Number(event.target.value) || 0 }))}
+              helper="最后一层会吃满最大跌幅。"
+            />
+          </div>
+
+          <div className="chart-panel" style={{ marginTop: 24 }}>
+            <div className="fake-chart" style={{ height: 180 }}>
+              <div className="fake-chart__line--tertiary">
+                <svg preserveAspectRatio="none" viewBox="0 0 100 100">
+                  <polyline fill="none" points="0,88 12,82 24,78 36,64 46,49 58,42 70,24 84,18 100,6" stroke="currentColor" strokeWidth="2.6" />
+                </svg>
+              </div>
+            </div>
+            <div className="table-note">历史回测预期年化: +12.4%</div>
+          </div>
+        </SurfaceCard>
+
+        <div className="card-grid">
+          <SurfaceCard>
+            <div className="section-header">
+              <div>
+                <div className="section-eyebrow">目标跌幅加仓点</div>
+                <h2 className="section-title">目标跌幅加仓点</h2>
+              </div>
+              <a className="button-secondary" href={links.addLevel}>
+                <MaterialIcon className="icon-button__icon" name="add" />
+                新增层级
+              </a>
+            </div>
+
+            <div className="stage-list">
+              {computed.stages.map((stage, index) => (
+                <article key={stage.id} className="stage-row">
+                  <div className={`stage-row__index stage-row__index--${index + 1}`}>{String(index + 1).padStart(2, '0')}</div>
+                  <div className="stage-row__body">
+                    <div className="stage-row__label">
+                      {index === 0 ? '基准层级' : `目标跌幅 ${formatPercent(stage.drawdown, 2)}`}
+                    </div>
+                    <div className="stage-row__fields">
+                      <NumberField
+                        label="分配权重 (%)"
+                        step="1"
+                        value={state.weights[index] ?? 0}
+                        onChange={(event) => {
+                          const nextWeights = [...state.weights];
+                          nextWeights[index] = Number(event.target.value) || 0;
+                          setState((current) => ({ ...current, weights: nextWeights }));
+                        }}
+                      />
+                      <NumberField label="入场价格 ($)" value={round(stage.price, 2)} readOnly onChange={() => {}} />
+                      <NumberField label="计划金额 ($)" value={round(stage.amount, 2)} readOnly onChange={() => {}} />
+                    </div>
+                    <div className="stage-row__meta">
+                      <span>{index === 0 ? '首笔价格固定为基准价' : `自动反推跌幅 ${formatPercent(stage.drawdown, 2)}`}</span>
+                      <strong>{formatCurrency(stage.shares, '', 3)} 股</strong>
+                    </div>
+                  </div>
+                  <span className="stage-row__delete">
+                    <MaterialIcon className="icon-button__icon" name="delete" />
+                  </span>
+                </article>
+              ))}
+            </div>
+
+            <div className="progress-line">
+              <div className="progress-line__head">
+                <span>总权重分配</span>
+                <strong>{formatPercent(computed.totalWeight, 0)}</strong>
+              </div>
+              <div className="progress-line__track">
+                <div className="progress-line__value" style={{ width: `${Math.max(Math.min(computed.totalWeight, 100), 0)}%` }} />
+              </div>
+            </div>
+          </SurfaceCard>
+
+          <div className="warning-card">
+            <div className="warning-card__title">
+              <MaterialIcon className="icon-button__icon" filled name="warning" />
+              风险提示
+            </div>
+            <p className="warning-card__text">
+              当前权重变化会同步重算目标跌幅和入场价格。建议保留现金缓冲，并在极端波动下复核最大跌幅设置。
+            </p>
+          </div>
+
+          <div className="editor-footer">
+            <a className="button-secondary" href={links.home}>取消</a>
+            <a className="button-primary" href={links.home}>
+              <MaterialIcon className="icon-button__icon" name="save" />
+              保存方案
+            </a>
+          </div>
+        </div>
+      </section>
+    </WorkspaceShell>
   );
 }

@@ -1,9 +1,20 @@
 import { buildStages, formatCurrency, formatPercent, readAccumulationState } from '../app/accumulation.js';
 import { buildDcaProjection, readDcaState } from '../app/dca.js';
-import { createTopTabs, screens } from '../app/screens.js';
+import { createTopTabs } from '../app/screens.js';
 import { buildPlan, readPlanState } from '../app/plan.js';
-import { AppShell } from '../components/AppShell.jsx';
-import { StatCard } from '../components/StatCard.jsx';
+import { MaterialIcon } from '../components/MaterialIcon.jsx';
+import { MetricCard, StatusBadge, SurfaceCard, WorkspaceShell } from '../components/PageChrome.jsx';
+
+const WATCHLIST = [
+  { symbol: 'QQQ', price: 502.44, active: true },
+  { symbol: 'VOO', price: 512.1 },
+  { symbol: 'SPY', price: 560.22 }
+];
+
+const HISTORY_PLANS = [
+  { name: '科技股累积', note: '平均成本: $548.05', active: true },
+  { name: '股息增长', note: '平均成本: $42.10' }
+];
 
 export function HomeExperience({ screen, links, inPagesDir }) {
   const accumulationState = readAccumulationState();
@@ -14,155 +25,258 @@ export function HomeExperience({ screen, links, inPagesDir }) {
   const dca = buildDcaProjection(dcaState);
   const tabs = createTopTabs({ inPagesDir });
   const nextBuyPrice = accumulation.stages[1]?.price ?? accumulationState.basePrice;
-  const screenVariants = screens.filter((item) => item.group === 'home' && item.id !== screen.id).slice(0, 5);
+  const reserveRatio = planState.totalBudget > 0 ? plan.reserveCapital / planState.totalBudget * 100 : 0;
 
   return (
-    <AppShell
+    <WorkspaceShell
       activeTab="home"
       tabs={tabs}
-      sideNav={{
-        title: '总览模块',
-        subtitle: '统一多页面应用',
-        items: [
-          { label: '策略总览', icon: '▣', href: links.home, active: true },
-          { label: '初始建仓', icon: '◎', href: links.accumNew },
-          { label: '加仓配置', icon: '◉', href: links.accumEdit },
-          { label: '定投计划', icon: '◌', href: links.dca },
-          { label: '交易历史', icon: '↺', href: links.history }
-        ],
-        footer: <a className="side-nav__cta" href={links.catalog}>页面目录</a>
-      }}
-      headerMeta={[
-        { label: '设备', value: screen.deviceLabel },
-        { label: '建仓层级', value: `${accumulation.stages.length} 层` },
-        { label: '定投频率', value: dcaState.frequency }
-      ]}
-      screen={screen}
+      headerRight={
+        <>
+          <label className="toolbar-search" aria-label="搜索市场">
+            <MaterialIcon className="toolbar-search__icon" name="search" />
+            <input placeholder="搜索市场..." type="text" />
+          </label>
+          <button className="icon-button" type="button">
+            <MaterialIcon className="icon-button__icon" name="notifications" />
+          </button>
+          <button className="icon-button" type="button">
+            <MaterialIcon className="icon-button__icon" name="settings" />
+          </button>
+          <div className="avatar">AT</div>
+        </>
+      }
+      sidebar={
+        <>
+          <div className="sidebar-brand-card">
+            <div className="sidebar-brand-card__mark">
+              <MaterialIcon filled name="monitoring" />
+            </div>
+            <div>
+              <div className="sidebar-brand-card__title">金字塔建仓追踪</div>
+              <div className="sidebar-brand-card__meta">运行中的策略</div>
+            </div>
+          </div>
+
+          <div className="sidebar-block">
+            <div className="sidebar-block__label">
+              <span>自选股</span>
+              <MaterialIcon className="icon-button__icon" filled name="add_circle" />
+            </div>
+            <div className="sidebar-watchlist">
+              {WATCHLIST.map((item) => (
+                <a
+                  key={item.symbol}
+                  className={item.active ? 'sidebar-watchlist__item is-active' : 'sidebar-watchlist__item'}
+                  href={links.home}
+                >
+                  <strong>{item.symbol}</strong>
+                  <span>{formatCurrency(item.price)}</span>
+                </a>
+              ))}
+            </div>
+          </div>
+
+          <div className="sidebar-block">
+            <div className="sidebar-block__label">历史计划</div>
+            <div className="sidebar-history-list">
+              {HISTORY_PLANS.map((item) => (
+                <div key={item.name} className={item.active ? 'sidebar-history-list__item is-active' : 'sidebar-history-list__item'}>
+                  <strong>{item.name}</strong>
+                  <span>{item.note}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="sidebar-footer">
+            <a className="button-primary button-full" href={links.accumNew}>
+              <MaterialIcon className="icon-button__icon" name="add" />
+              新建仓计划
+            </a>
+            <div className="sidebar-block">
+              <a className="sidebar-foot-link" href={links.catalog}>
+                <span>页面目录</span>
+                <MaterialIcon className="icon-button__icon" name="menu" />
+              </a>
+              <a className="sidebar-foot-link" href={links.history}>
+                <span>风险披露</span>
+                <MaterialIcon className="icon-button__icon" name="warning" />
+              </a>
+            </div>
+          </div>
+        </>
+      }
     >
-      <section className="page-section page-section--hero">
+      <section className="page-header">
         <div>
-          <div className="page-eyebrow">React 统一封面</div>
-          <h1 className="page-title">{screen.title}</h1>
-          <p className="page-copy">首页、加仓、建仓和定投页面都已迁到同一套 React 组件架构。当前页面来自同一个共享模板，不再依赖 Stitch 导出的静态 HTML。</p>
+          <div className="page-header__split">
+            <div>
+              <h1 className="page-title">QQQ 建仓策略</h1>
+              <p className="page-subtitle">纳斯达克100指数基金 (QQQ)</p>
+            </div>
+            <StatusBadge>运行中</StatusBadge>
+          </div>
         </div>
-        <div className="hero-grid">
-          <StatCard label="建仓总预算" value={formatCurrency(planState.totalBudget)} note={`现金留存 ${formatPercent(planState.cashReservePct, 0)}`} tone="primary" />
-          <StatCard label="下次买入价" value={formatCurrency(nextBuyPrice)} note={`末层跌幅 ${formatPercent(accumulationState.maxDrawdown, 2)}`} />
-          <StatCard label="定投总投入" value={formatCurrency(dca.totalInvestment)} note={`${dca.executionCount} 次执行 · ${dca.cadenceLabel}`} />
+        <div className="page-header__actions">
+          <a className="button-secondary" href={links.accumEdit}>
+            <MaterialIcon className="icon-button__icon" name="edit" />
+            修改配置
+          </a>
+          <button className="button-danger" type="button">
+            <MaterialIcon className="icon-button__icon" name="delete" />
+            删除
+          </button>
         </div>
       </section>
 
-      <div className="content-grid">
-        <section className="panel">
-          <div className="panel__header">
+      <section className="metric-grid">
+        <MetricCard
+          accent="primary"
+          label="总投资额"
+          note="当前金字塔策略总预算"
+          progress={Math.max(100 - reserveRatio, 0)}
+          value={formatCurrency(accumulation.investedCapital)}
+        />
+        <MetricCard label="剩余预算" note={`${formatPercent(reserveRatio, 1)} 可用资金`} value={formatCurrency(plan.reserveCapital)} />
+        <MetricCard label="下次买入价" note="等待价格触发信号" value={formatCurrency(nextBuyPrice)} />
+        <MetricCard label="平均成本" note={`${formatPercent(4.2, 1, true)} 增长`} value={formatCurrency(accumulation.averageCost)} />
+      </section>
+
+      <section className="content-split">
+        <SurfaceCard>
+          <div className="section-header">
             <div>
-              <div className="panel__eyebrow">统一入口</div>
-              <h2 className="panel__title">核心操作</h2>
+              <div className="section-eyebrow">价格走势与买点位</div>
+              <h2 className="section-title">价格走势与买点位</h2>
+            </div>
+            <div className="range-switch">
+              <span>1D</span>
+              <span className="is-active">1W</span>
+              <span>1M</span>
             </div>
           </div>
-          <div className="action-grid">
-            <a className="action-card" href={links.accumNew}>
-              <strong>初始建仓</strong>
-              <span>配置总预算、现金留存和首笔价格。</span>
-            </a>
-            <a className="action-card" href={links.accumEdit}>
-              <strong>加仓配置</strong>
-              <span>按权重自动反推出各层入场价格。</span>
-            </a>
-            <a className="action-card" href={links.dca}>
-              <strong>定投计划</strong>
-              <span>计算执行次数和累计投入金额。</span>
-            </a>
-            <a className="action-card" href={links.history}>
-              <strong>交易历史</strong>
-              <span>查看最近执行记录和当前层级快照。</span>
-            </a>
-          </div>
-          <div className="panel__split">
-            <div>
-              <div className="panel__eyebrow">当前版本</div>
-              <p className="page-note">{screen.title}</p>
+          <div className="chart-panel">
+            <div className="fake-chart">
+              <div className="fake-chart__line">
+                <svg preserveAspectRatio="none" viewBox="0 0 100 100">
+                  <polyline fill="none" points="0,70 10,68 18,74 28,62 36,58 46,42 58,49 66,34 76,26 84,20 92,12 100,4" stroke="currentColor" strokeWidth="2.2" />
+                </svg>
+              </div>
+              <div className="fake-chart__line--secondary">
+                <svg preserveAspectRatio="none" viewBox="0 0 100 100">
+                  <polyline fill="none" points="0,76 12,70 22,72 34,67 44,63 56,58 66,53 78,49 90,45 100,40" stroke="currentColor" strokeWidth="2" />
+                </svg>
+              </div>
+              <div className="fake-chart__line--tertiary">
+                <svg preserveAspectRatio="none" viewBox="0 0 100 100">
+                  <polyline fill="none" points="0,90 12,88 22,84 34,80 44,69 54,57 66,44 76,33 88,18 100,7" stroke="currentColor" strokeWidth="2.6" />
+                </svg>
+              </div>
+              <div className="fake-chart__bars">
+                <svg preserveAspectRatio="none" viewBox="0 0 100 100">
+                  <rect fill="currentColor" height="32" width="2.5" x="3" y="68" />
+                  <rect fill="currentColor" height="42" width="2.5" x="9" y="58" />
+                  <rect fill="currentColor" height="26" width="2.5" x="15" y="74" />
+                  <rect fill="currentColor" height="54" width="2.5" x="21" y="46" />
+                  <rect fill="currentColor" height="48" width="2.5" x="27" y="52" />
+                  <rect fill="currentColor" height="66" width="2.5" x="33" y="34" />
+                  <rect fill="currentColor" height="39" width="2.5" x="39" y="61" />
+                  <rect fill="currentColor" height="58" width="2.5" x="45" y="42" />
+                  <rect fill="currentColor" height="44" width="2.5" x="51" y="56" />
+                  <rect fill="currentColor" height="70" width="2.5" x="57" y="30" />
+                  <rect fill="currentColor" height="48" width="2.5" x="63" y="52" />
+                  <rect fill="currentColor" height="64" width="2.5" x="69" y="36" />
+                  <rect fill="currentColor" height="74" width="2.5" x="75" y="26" />
+                  <rect fill="currentColor" height="52" width="2.5" x="81" y="48" />
+                  <rect fill="currentColor" height="68" width="2.5" x="87" y="32" />
+                  <rect fill="currentColor" height="80" width="2.5" x="93" y="20" />
+                </svg>
+              </div>
+              <div className="fake-chart__marker fake-chart__marker--buy-a">触发买入A</div>
+              <div className="fake-chart__marker fake-chart__marker--buy-b">触发买入B</div>
             </div>
-            <div>
-              <div className="panel__eyebrow">同组页面</div>
-              <div className="pill-list">
-                {screenVariants.map((item) => (
-                  <a key={item.id} className="pill-link" href={`./${item.id}.html`}>{item.title}</a>
+
+            <div className="stage-chip-row">
+              {accumulation.stages.slice(0, 3).map((stage, index) => (
+                <div key={stage.id} className={index === 1 ? 'stage-chip is-active' : 'stage-chip'}>
+                  <div className="stage-chip__label">阶段 {index + 1}</div>
+                  <div className="stage-chip__value">{formatCurrency(stage.price)}</div>
+                  <div className="stage-chip__meta">{index === 0 ? '执行完成' : index === 1 ? '即将触发' : '待命'}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </SurfaceCard>
+
+        <div className="card-grid">
+          <SurfaceCard className="surface-card--tight">
+            <div className="section-header">
+              <div>
+                <div className="section-eyebrow">建仓计划详情</div>
+                <h2 className="section-title">建仓计划详情</h2>
+              </div>
+            </div>
+            <table className="plan-table">
+              <thead>
+                <tr>
+                  <th>阶段</th>
+                  <th>价格</th>
+                  <th>跌幅</th>
+                  <th>金额</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accumulation.stages.map((stage, index) => (
+                  <tr key={stage.id}>
+                    <td>{String(index + 1).padStart(2, '0')}</td>
+                    <td>{formatCurrency(stage.price)}</td>
+                    <td>{index === 0 ? '基准' : formatPercent(stage.drawdown, 1)}</td>
+                    <td>{formatCurrency(stage.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </SurfaceCard>
+
+          <SurfaceCard className="surface-card--tight">
+            <div className="section-header">
+              <div>
+                <div className="section-eyebrow">资金配置模型</div>
+                <h2 className="section-title">资金配置模型</h2>
+              </div>
+            </div>
+            <div className="weight-stack">
+              <div className="weight-stack__bars">
+                {accumulation.stages.map((stage, index) => (
+                  <div
+                    key={stage.id}
+                    className={index < accumulation.stages.length - 1 ? 'weight-stack__bar is-muted' : 'weight-stack__bar'}
+                    style={{ height: `${Math.max(stage.weightPercent * 2.4, 28)}px` }}
+                  >
+                    {formatPercent(stage.weightPercent, 0)}
+                  </div>
                 ))}
               </div>
+              <div className="table-note">分配权重与目标跌幅同步驱动入场价格，末层最大跌幅 {formatPercent(accumulationState.maxDrawdown, 2)}。</div>
             </div>
-          </div>
-        </section>
+          </SurfaceCard>
 
-        <section className="panel panel--table">
-          <div className="panel__header">
-            <div>
-              <div className="panel__eyebrow">加仓摘要</div>
-              <h2 className="panel__title">当前分层执行计划</h2>
-            </div>
-          </div>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>阶段</th>
-                <th>权重</th>
-                <th>跌幅</th>
-                <th>入场价格</th>
-                <th>计划金额</th>
-              </tr>
-            </thead>
-            <tbody>
-              {accumulation.stages.map((stage, index) => (
-                <tr key={stage.id}>
-                  <td>{stage.label}</td>
-                  <td>{formatPercent(stage.weightPercent, 1)}</td>
-                  <td>{index === 0 ? '基准' : formatPercent(stage.drawdown, 2)}</td>
-                  <td>{formatCurrency(stage.price)}</td>
-                  <td>{formatCurrency(stage.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      </div>
-
-      <div className="content-grid content-grid--history">
-        <section className="panel">
-          <div className="panel__header">
-            <div>
-              <div className="panel__eyebrow">定投预览</div>
-              <h2 className="panel__title">最近几次执行</h2>
-            </div>
-          </div>
-          <div className="schedule-list">
-            {dca.schedule.map((row) => (
-              <div key={row.id} className="schedule-item">
-                <div>
-                  <strong>{row.label}</strong>
-                  <span>{row.note}</span>
-                </div>
-                <div>
-                  <strong>{formatCurrency(row.contribution)}</strong>
-                  <span>累计 {formatCurrency(row.cumulative)}</span>
-                </div>
+          <SurfaceCard className="surface-card--tight">
+            <div className="section-header">
+              <div>
+                <div className="section-eyebrow">操作说明</div>
+                <h2 className="section-title">执行建议</h2>
               </div>
-            ))}
-          </div>
-        </section>
-        <section className="panel">
-          <div className="panel__header">
-            <div>
-              <div className="panel__eyebrow">迁移说明</div>
-              <h2 className="panel__title">当前站点结构</h2>
             </div>
-          </div>
-          <ul className="bullet-list">
-            <li>全部页面现在都由 React 页面配置驱动，而不是保留每张 Stitch 导出的静态 HTML。</li>
-            <li>目录页不再依赖截图预览，页面清单直接来自内建的屏幕元数据。</li>
-            <li>建仓、加仓和定投共用一套导航、侧栏和样式变量，后续继续改版只需要改源码，不需要回收 Stitch 导出文件。</li>
-          </ul>
-        </section>
-      </div>
-    </AppShell>
+            <ul className="list-note">
+              <li>首笔建仓使用 {formatCurrency(accumulation.stages[0]?.price ?? accumulationState.basePrice)} 作为基准价。</li>
+              <li>下一层计划买入价为 {formatCurrency(nextBuyPrice)}，触发后自动重算平均成本。</li>
+              <li>定投计划当前总投入 {formatCurrency(dca.totalInvestment)}，执行频率为 {dcaState.frequency}。</li>
+            </ul>
+          </SurfaceCard>
+        </div>
+      </section>
+    </WorkspaceShell>
   );
 }

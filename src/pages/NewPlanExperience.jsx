@@ -1,151 +1,209 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatCurrency, formatPercent } from '../app/accumulation.js';
 import { buildPlan, persistPlanState, readPlanState } from '../app/plan.js';
-import { createTopTabs } from '../app/screens.js';
 import { NumberField, SelectField, TextField } from '../components/FormFields.jsx';
-import { AppShell } from '../components/AppShell.jsx';
-import { StatCard } from '../components/StatCard.jsx';
+import { MaterialIcon } from '../components/MaterialIcon.jsx';
+import { MinimalShell, SurfaceCard } from '../components/PageChrome.jsx';
 
 const frequencyOptions = ['每日', '每周', '每月', '每季'];
 
-export function NewPlanExperience({ screen, links, inPagesDir }) {
+export function NewPlanExperience({ screen, links }) {
   const [state, setState] = useState(() => readPlanState());
   const computed = useMemo(() => buildPlan(state), [state]);
-  const tabs = createTopTabs({ inPagesDir });
 
   useEffect(() => {
     persistPlanState(state, computed);
   }, [state, computed]);
 
   return (
-    <AppShell
-      activeTab="home"
-      tabs={tabs}
-      sideNav={{
-        title: '建仓模块',
-        subtitle: '预算与现金配置',
-        items: [
-          { label: '策略总览', icon: '▣', href: links.home },
-          { label: '初始建仓', icon: '◎', href: links.accumNew, active: true },
-          { label: '加仓配置', icon: '◉', href: links.accumEdit },
-          { label: '定投计划', icon: '◌', href: links.dca },
-          { label: '页面目录', icon: '☰', href: links.catalog }
-        ],
-        footer: <a className="side-nav__cta" href={links.home}>返回封面</a>
-      }}
-      headerMeta={[
-        { label: '标的', value: state.symbol },
-        { label: '现金留存', value: formatPercent(state.cashReservePct, 0) },
-        { label: '批次数', value: `${computed.layers.length} 批` }
-      ]}
-      screen={screen}
+    <MinimalShell
+      title="投资计划"
+      headerRight={
+        <>
+          <button className="icon-button" type="button">
+            <MaterialIcon className="icon-button__icon" name="settings" />
+          </button>
+          <button className="icon-button" type="button">
+            <MaterialIcon className="icon-button__icon" name="account_circle" />
+          </button>
+        </>
+      }
     >
-      <section className="page-section page-section--hero">
+      <section className="page-header">
         <div>
-          <div className="page-eyebrow">初始建仓配置</div>
-          <h1 className="page-title">{screen.title}</h1>
-          <p className="page-copy">建仓总预算按“总预算 × (1 - 现金留存比例)”计算。每批的触发跌幅和分配比例会同步得到入场价格和预估平均成本。</p>
-        </div>
-        <div className="hero-grid">
-          <StatCard label="总预算" value={formatCurrency(state.totalBudget)} note="账户总资金规模" tone="primary" />
-          <StatCard label="可投入资金" value={formatCurrency(computed.investableCapital)} note={`留存现金 ${formatCurrency(computed.reserveCapital)}`} />
-          <StatCard label="预估平均成本" value={formatCurrency(computed.averageCost)} note={`共 ${computed.layers.length} 批执行`} />
+          <h1 className="page-title page-title--compact">{screen.title}</h1>
+          <p className="page-subtitle">设置您的金字塔建仓策略，通过分批买入降低持仓风险。</p>
         </div>
       </section>
 
-      <div className="content-grid">
-        <section className="panel">
-          <div className="panel__header">
-            <div>
-              <div className="panel__eyebrow">预算设置</div>
-              <h2 className="panel__title">计划基础参数</h2>
+      <section className="minimal-layout">
+        <div>
+          <SurfaceCard>
+            <div className="section-header">
+              <div>
+                <div className="section-eyebrow">基础设置</div>
+                <h2 className="section-title">基础设置</h2>
+              </div>
+              <div className="section-step">Step 01</div>
             </div>
-          </div>
-          <div className="field-grid">
-            <TextField label="标的代码" value={state.symbol} onChange={(event) => setState((current) => ({ ...current, symbol: event.target.value || 'QQQ' }))} />
-            <NumberField label="总预算" prefix="$" value={state.totalBudget} onChange={(event) => setState((current) => ({ ...current, totalBudget: Number(event.target.value) || 0 }))} />
-            <NumberField label="现金留存比例" suffix="%" value={state.cashReservePct} onChange={(event) => setState((current) => ({ ...current, cashReservePct: Number(event.target.value) || 0 }))} />
-            <NumberField label="首笔价格" prefix="$" value={state.basePrice} onChange={(event) => setState((current) => ({ ...current, basePrice: Number(event.target.value) || 0 }))} />
-            <SelectField label="执行频率" value={state.frequency} onChange={(event) => setState((current) => ({ ...current, frequency: event.target.value }))} options={frequencyOptions} />
-          </div>
-        </section>
 
-        <section className="panel">
-          <div className="panel__header">
-            <div>
-              <div className="panel__eyebrow">建仓批次</div>
-              <h2 className="panel__title">分批预算与触发条件</h2>
+            <div className="field-grid">
+              <TextField
+                label="资产标的"
+                value={state.symbol}
+                onChange={(event) => setState((current) => ({ ...current, symbol: event.target.value || 'QQQ' }))}
+                placeholder="输入股票代码或简称 (如: AAPL)"
+              />
+              <div className="field-grid field-grid--2">
+                <NumberField
+                  label="总投资额"
+                  prefix="$"
+                  value={state.totalBudget}
+                  onChange={(event) => setState((current) => ({ ...current, totalBudget: Number(event.target.value) || 0 }))}
+                />
+                <label className="field">
+                  <span className="field__label">
+                    <span>现金留存比例</span>
+                    <span>{formatPercent(state.cashReservePct, 0)}</span>
+                  </span>
+                  <div className="field__input-shell">
+                    <div className="inline-slider">
+                      <input
+                        max="90"
+                        min="0"
+                        step="1"
+                        type="range"
+                        value={state.cashReservePct}
+                        onChange={(event) => setState((current) => ({ ...current, cashReservePct: Number(event.target.value) || 0 }))}
+                      />
+                    </div>
+                  </div>
+                  <span className="field__helper">默认 30%，建仓总预算 = 总投资额 × (1 - 现金留存比例)</span>
+                </label>
+              </div>
+              <div className="field-grid field-grid--2">
+                <NumberField
+                  label="首笔价格"
+                  prefix="$"
+                  value={state.basePrice}
+                  onChange={(event) => setState((current) => ({ ...current, basePrice: Number(event.target.value) || 0 }))}
+                />
+                <SelectField
+                  label="执行频率"
+                  value={state.frequency}
+                  onChange={(event) => setState((current) => ({ ...current, frequency: event.target.value }))}
+                  options={frequencyOptions}
+                />
+              </div>
             </div>
-          </div>
-          <div className="stage-list">
-            {computed.layers.map((layer, index) => (
-              <article key={layer.id} className={index === 0 ? 'stage-card is-primary' : 'stage-card'}>
-                <div className="stage-card__index">{String(index + 1).padStart(2, '0')}</div>
-                <div className="stage-card__fields">
-                  <NumberField
-                    label="分配比例"
-                    suffix="%"
-                    step="1"
-                    value={state.layerWeights[index] ?? 0}
-                    onChange={(event) => {
-                      const next = [...state.layerWeights];
-                      next[index] = Number(event.target.value) || 0;
-                      setState((current) => ({ ...current, layerWeights: next }));
-                    }}
-                  />
-                  <NumberField
-                    label="触发跌幅"
-                    suffix="%"
-                    step="0.5"
-                    value={state.triggerDrops[index] ?? 0}
-                    onChange={(event) => {
-                      const next = [...state.triggerDrops];
-                      next[index] = Number(event.target.value) || 0;
-                      setState((current) => ({ ...current, triggerDrops: next }));
-                    }}
-                  />
-                  <NumberField label="计划投入" prefix="$" value={layer.amount.toFixed(2)} readOnly onChange={() => {}} />
-                </div>
-                <div className="stage-card__meta">
-                  <span>入场价格 {formatCurrency(layer.price)}</span>
-                  <strong>{formatCurrency(layer.shares, '', 3)} 股</strong>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-      </div>
 
-      <section className="panel panel--table">
-        <div className="panel__header">
-          <div>
-            <div className="panel__eyebrow">建仓摘要</div>
-            <h2 className="panel__title">预算分配明细</h2>
+            <div className="budget-strip">
+              <div>
+                <div className="section-eyebrow">计划建仓总预算</div>
+                <div className="table-note">扣除预留现金后的可执行预算</div>
+              </div>
+              <div className="budget-strip__value">{formatCurrency(computed.investableCapital, '¥ ')}</div>
+            </div>
+          </SurfaceCard>
+
+          <SurfaceCard>
+            <div className="section-header">
+              <div>
+                <div className="section-eyebrow">分批建仓设置</div>
+                <h2 className="section-title">分批建仓设置</h2>
+              </div>
+              <div className="section-step">Step 02</div>
+            </div>
+            <div className="table-note" style={{ marginBottom: 16 }}>按现金比例自动计算每笔投入金额</div>
+
+            <div className="step-list">
+              {computed.layers.map((layer, index) => (
+                <div key={layer.id} className="step-row">
+                  <div className="step-row__head">
+                    <div className={index === 0 ? 'step-badge is-active' : 'step-badge'}>{index + 1}</div>
+                    <div className="step-row__title">{index === 0 ? '首笔买入' : `第 ${index + 1} 笔买入`}</div>
+                  </div>
+                  <div className="step-row__fields">
+                    <NumberField
+                      label="分配比例"
+                      suffix="%"
+                      step="1"
+                      value={state.layerWeights[index] ?? 0}
+                      onChange={(event) => {
+                        const next = [...state.layerWeights];
+                        next[index] = Number(event.target.value) || 0;
+                        setState((current) => ({ ...current, layerWeights: next }));
+                      }}
+                    />
+                    <NumberField
+                      label="触发跌幅"
+                      suffix="%"
+                      step="0.5"
+                      value={state.triggerDrops[index] ?? 0}
+                      onChange={(event) => {
+                        const next = [...state.triggerDrops];
+                        next[index] = Number(event.target.value) || 0;
+                        setState((current) => ({ ...current, triggerDrops: next }));
+                      }}
+                    />
+                  </div>
+                  <div className="stage-row__meta">
+                    <span>入场价格 {formatCurrency(layer.price)}</span>
+                    <strong>计划投入 {formatCurrency(layer.amount)}</strong>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </SurfaceCard>
+
+          <div className="minimal-actions">
+            <a className="button-secondary" href={links.home}>取消</a>
+            <a className="button-primary" href={links.home}>确认创建</a>
           </div>
         </div>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>批次</th>
-              <th>分配比例</th>
-              <th>触发跌幅</th>
-              <th>入场价格</th>
-              <th>计划投入</th>
-            </tr>
-          </thead>
-          <tbody>
-            {computed.layers.map((layer) => (
-              <tr key={layer.id}>
-                <td>{layer.label}</td>
-                <td>{formatPercent(layer.weight, 1)}</td>
-                <td>{formatPercent(layer.drawdown, 1)}</td>
-                <td>{formatCurrency(layer.price)}</td>
-                <td>{formatCurrency(layer.amount)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+        <div className="minimal-layout__aside">
+          <SurfaceCard className="surface-card--tight">
+            <div className="section-eyebrow">策略成本预览</div>
+            <div className="summary-tile__value">{formatCurrency(computed.averageCost, '¥ ')}</div>
+            <div className="summary-lines">
+              <div className="summary-lines__row">
+                <span>可投入资金</span>
+                <strong>{formatCurrency(computed.investableCapital, '¥ ')}</strong>
+              </div>
+              <div className="summary-lines__row">
+                <span>预留现金</span>
+                <strong>{formatCurrency(computed.reserveCapital, '¥ ')}</strong>
+              </div>
+            </div>
+            <div className="bar-preview">
+              {computed.layers.map((layer) => (
+                <span key={layer.id} style={{ height: `${Math.max(layer.weight / 1.8, 22)}px` }} />
+              ))}
+            </div>
+          </SurfaceCard>
+
+          <div className="info-card">
+            <div className="info-card__title">
+              <MaterialIcon className="icon-button__icon" filled name="check_circle" />
+              执行建议
+            </div>
+            <p className="info-card__text">
+              将计划分为 {computed.layers.length} 批执行，留存现金 {formatPercent(state.cashReservePct, 0)}。后续加仓页会沿用这些分配比例。
+            </p>
+          </div>
+
+          <div className="warning-card">
+            <div className="warning-card__title">
+              <MaterialIcon className="icon-button__icon" filled name="tips_and_updates" />
+              估计备注
+            </div>
+            <p className="warning-card__text">
+              平均成本和批次金额会随分配比例、触发跌幅和首笔价格自动联动更新。
+            </p>
+          </div>
+        </div>
       </section>
-    </AppShell>
+    </MinimalShell>
   );
 }
