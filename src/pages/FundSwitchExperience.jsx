@@ -16,7 +16,7 @@ function createOcrState(overrides = {}) {
   return {
     status: 'idle',
     progress: 0,
-    message: '等待上传交易截图，前端会调用 /api/ocr，由 Cloudflare Worker 转发给 Gemini。',
+    message: '等待上传交易截图。',
     durationMs: 0,
     error: '',
     lineCount: 0,
@@ -26,22 +26,22 @@ function createOcrState(overrides = {}) {
 
 function getStatusBadgeProps(status) {
   if (status === 'loading') {
-    return { tone: 'warning', icon: 'hourglass_top', label: 'Gemini 处理中' };
+    return { tone: 'warning', icon: 'hourglass_top', label: '正在提取' };
   }
 
   if (status === 'error') {
-    return { tone: 'warning', icon: 'error', label: 'OCR 识别失败' };
+    return { tone: 'warning', icon: 'error', label: '导入失败' };
   }
 
   if (status === 'warning') {
-    return { tone: 'warning', icon: 'warning', label: 'OCR 完成，需人工确认' };
+    return { tone: 'warning', icon: 'warning', label: '提取完成，需人工确认' };
   }
 
   if (status === 'success') {
-    return { tone: 'success', icon: 'check_circle', label: '识别成功，请确认数据' };
+    return { tone: 'success', icon: 'check_circle', label: '导入成功，请确认数据' };
   }
 
-  return { tone: 'warning', icon: 'upload_file', label: '等待上传交易截图' };
+  return { tone: 'warning', icon: 'upload_file', label: '等待导入截图' };
 }
 
 function buildUploadBadge(fileName) {
@@ -53,6 +53,7 @@ export function FundSwitchExperience({ screen, links }) {
   const [state, setState] = useState(() => readFundSwitchState());
   const [ocrState, setOcrState] = useState(() => createOcrState());
   const [ocrPreview, setOcrPreview] = useState([]);
+  const [showCalculationDetails, setShowCalculationDetails] = useState(false);
   const fileInputRef = useRef(null);
   const summary = useMemo(() => buildFundSwitchSummary(state), [state]);
   const workspaceTabs = [
@@ -119,7 +120,7 @@ export function FundSwitchExperience({ screen, links }) {
     setOcrState(createOcrState({
       status: 'loading',
       progress: 12,
-      message: '准备上传到 /api/ocr'
+      message: '准备上传截图'
     }));
 
     try {
@@ -152,8 +153,8 @@ export function FundSwitchExperience({ screen, links }) {
           durationMs: result.durationMs,
           lineCount: result.recordCount || result.rows.length,
           message: hasWarnings
-            ? `Gemini 已提取 ${result.rows.length} 条交易记录，请重点复核提示项。`
-            : `Gemini 提取完成，已解析 ${result.rows.length} 条交易记录。`
+            ? `已提取 ${result.rows.length} 条交易记录，请重点复核提示项。`
+            : `提取完成，已解析 ${result.rows.length} 条交易记录。`
         }));
       } else {
         setOcrState(createOcrState({
@@ -161,15 +162,15 @@ export function FundSwitchExperience({ screen, links }) {
           progress: 100,
           durationMs: result.durationMs,
           lineCount: 0,
-          message: 'Gemini 已完成提取，但没有稳定产出可回填的交易记录，请手动确认或补录。'
+          message: '提取完成，但没有稳定产出可回填的交易记录，请手动确认或补录。'
         }));
       }
     } catch (error) {
       setOcrState(createOcrState({
         status: 'error',
         progress: 0,
-        error: error instanceof Error ? error.message : '/api/ocr 调用失败，请检查 Worker、Secret 或上传更清晰的截图后重试。',
-        message: 'Gemini 提取失败'
+        error: error instanceof Error ? error.message : '接口调用失败，请检查截图内容或稍后重试。',
+        message: '提取失败'
       }));
     }
   }
@@ -249,7 +250,6 @@ export function FundSwitchExperience({ screen, links }) {
       <section className="page-header">
         <div>
           <h1 className="page-title page-title--compact">基金切换收益助手</h1>
-          <p className="page-subtitle">通过 Cloudflare Worker 中转 Gemini 识别交易截图，并自动回填切换收益计算参数。</p>
         </div>
         <StatusBadge icon={badge.icon} tone={badge.tone}>{badge.label}</StatusBadge>
       </section>
@@ -275,7 +275,7 @@ export function FundSwitchExperience({ screen, links }) {
                 <MaterialIcon className="upload-dropzone__icon-symbol" name={ocrState.status === 'loading' ? 'hourglass_top' : 'cloud_upload'} />
               </div>
               <div className="upload-dropzone__title">点击或拖拽上传交易截图</div>
-              <div className="upload-dropzone__copy">支持 PNG / JPG / JPEG / WebP，图片会发送到站点同源的 /api/ocr，由 Cloudflare Worker 调用 Gemini。</div>
+              <div className="upload-dropzone__copy">支持 PNG / JPG / JPEG / WebP</div>
               <div className="upload-dropzone__hint">{ocrState.message}</div>
             </button>
           </SurfaceCard>
@@ -283,8 +283,8 @@ export function FundSwitchExperience({ screen, links }) {
           <SurfaceCard className="surface-card--tight">
             <div className="section-header">
               <div>
-                <div className="section-eyebrow">OCR 识别状态</div>
-                <h2 className="section-title">OCR 识别状态</h2>
+                <div className="section-eyebrow">持仓明细</div>
+                <h2 className="section-title">持仓明细</h2>
               </div>
               <div className="table-note">
                 {ocrState.status === 'idle' ? '待开始' : `${ocrState.progress}%`}
@@ -304,7 +304,7 @@ export function FundSwitchExperience({ screen, links }) {
                     ? ocrState.error
                     : ocrState.status === 'success' || ocrState.status === 'warning'
                       ? `返回 ${Math.max(ocrState.lineCount, 0)} 条可回填记录，当前表单已同步 ${Math.max(state.recognizedRecords, 0)} 条交易记录`
-                      : '上传后会自动尝试提取日期、基金名称、买卖方向、单价和份额'}
+                      : '上传后会自动整理日期、基金名称、交易方向、单价和份额'}
                 </span>
               </div>
               <MaterialIcon className="ocr-file__check" filled name={ocrState.status === 'error' ? 'error' : ocrState.status === 'loading' ? 'hourglass_top' : 'check_circle'} />
@@ -316,100 +316,6 @@ export function FundSwitchExperience({ screen, links }) {
                 ))}
               </div>
             ) : null}
-          </SurfaceCard>
-
-          <div className="summary-tile summary-tile--blue">
-            <div className="section-eyebrow">模型提取引擎</div>
-            <div className="section-title" style={{ color: 'inherit', marginTop: 4 }}>模型提取引擎</div>
-            <p className="promo-card__copy">自动剔除手续费影响，精准对齐切换前后的份额价值差异。</p>
-            <div className="summary-lines summary-lines--compact">
-              <div className="summary-lines__row">
-                <span>不切换现值</span>
-                <strong>{formatCurrency(summary.stayValue, '¥ ')}</strong>
-              </div>
-              <div className="summary-lines__row">
-                <span>切换后现值</span>
-                <strong>{formatCurrency(summary.switchedValue, '¥ ')}</strong>
-              </div>
-              <div className="summary-lines__row">
-                <span>接口耗时</span>
-                <strong>{ocrState.durationMs ? `${ocrState.durationMs} ms` : '等待 /api/ocr'}</strong>
-              </div>
-            </div>
-            <div className="promo-card__action">
-              <button className="button-secondary" type="button">查看计算逻辑</button>
-            </div>
-          </div>
-
-          <SurfaceCard className="surface-card--tight">
-            <div className="section-header">
-              <div>
-                <div className="section-eyebrow">收益计算参数</div>
-                <h2 className="section-title">切换收益比较</h2>
-              </div>
-            </div>
-            <div className="field-grid field-grid--2">
-              <label className="field">
-                <span className="field__label">原基金代码 / 名称</span>
-                <div className="field__input-shell">
-                  <input type="text" value={summary.comparison.sourceCode} onChange={(event) => updateComparison('sourceCode', event.target.value)} />
-                </div>
-              </label>
-              <label className="field">
-                <span className="field__label">现基金代码 / 名称</span>
-                <div className="field__input-shell">
-                  <input type="text" value={summary.comparison.targetCode} onChange={(event) => updateComparison('targetCode', event.target.value)} />
-                </div>
-              </label>
-              <label className="field">
-                <span className="field__label">原持有份额</span>
-                <div className="field__input-shell">
-                  <input type="number" step="0.01" value={summary.comparison.sourceSellShares} onChange={(event) => updateComparison('sourceSellShares', event.target.value)} />
-                </div>
-              </label>
-              <label className="field">
-                <span className="field__label">原基金现价</span>
-                <div className="field__input-shell">
-                  <input type="number" step="0.0001" value={summary.comparison.sourceCurrentPrice} onChange={(event) => updateComparison('sourceCurrentPrice', event.target.value)} />
-                </div>
-              </label>
-              <label className="field">
-                <span className="field__label">现持有份额</span>
-                <div className="field__input-shell">
-                  <input type="number" step="0.01" value={summary.comparison.targetBuyShares} onChange={(event) => updateComparison('targetBuyShares', event.target.value)} />
-                </div>
-              </label>
-              <label className="field">
-                <span className="field__label">现基金现价</span>
-                <div className="field__input-shell">
-                  <input type="number" step="0.0001" value={summary.comparison.targetCurrentPrice} onChange={(event) => updateComparison('targetCurrentPrice', event.target.value)} />
-                </div>
-              </label>
-              <label className="field">
-                <span className="field__label">买入总成本</span>
-                <div className="field__input-shell">
-                  <input type="number" step="0.01" value={summary.comparison.switchCost} onChange={(event) => updateComparison('switchCost', event.target.value)} />
-                </div>
-              </label>
-              <label className="field">
-                <span className="field__label">额外补入现金</span>
-                <div className="field__input-shell">
-                  <input type="number" step="0.01" value={summary.comparison.extraCash} onChange={(event) => updateComparison('extraCash', event.target.value)} />
-                </div>
-              </label>
-              <label className="field">
-                <span className="field__label">单笔手续费</span>
-                <div className="field__input-shell">
-                  <input type="number" step="0.01" value={summary.feePerTrade} onChange={(event) => updateFeePerTrade(event.target.value)} />
-                </div>
-              </label>
-              <label className="field">
-                <span className="field__label">手续费笔数</span>
-                <div className="field__input-shell">
-                  <input type="number" step="1" value={summary.comparison.feeTradeCount} onChange={(event) => updateComparison('feeTradeCount', event.target.value)} />
-                </div>
-              </label>
-            </div>
           </SurfaceCard>
 
           <SurfaceCard className="surface-card--tight fund-result-card">
@@ -445,10 +351,109 @@ export function FundSwitchExperience({ screen, links }) {
         </div>
 
         <SurfaceCard className="fund-table-card">
+          <div className="fund-inline-summary summary-tile summary-tile--blue">
+            <div className="fund-inline-summary__head">
+              <div>
+                <div className="section-eyebrow">模型提取引擎</div>
+                <div className="section-title" style={{ color: 'inherit', marginTop: 4 }}>模型提取引擎</div>
+              </div>
+              <button className="button-secondary" type="button" onClick={() => setShowCalculationDetails((value) => !value)}>
+                {showCalculationDetails ? '收起计算逻辑' : '查看计算逻辑'}
+              </button>
+            </div>
+            <div className="summary-lines summary-lines--compact">
+              <div className="summary-lines__row">
+                <span>不切换现值</span>
+                <strong>{formatCurrency(summary.stayValue, '¥ ')}</strong>
+              </div>
+              <div className="summary-lines__row">
+                <span>切换后现值</span>
+                <strong>{formatCurrency(summary.switchedValue, '¥ ')}</strong>
+              </div>
+              <div className="summary-lines__row">
+                <span>接口耗时</span>
+                <strong>{ocrState.durationMs ? `${ocrState.durationMs} ms` : '等待接口返回'}</strong>
+              </div>
+            </div>
+          </div>
+
+          {showCalculationDetails ? (
+            <div className="fund-logic-panel">
+              <div className="section-header">
+                <div>
+                  <div className="section-eyebrow">收益计算参数</div>
+                  <h2 className="section-title">切换收益比较</h2>
+                </div>
+              </div>
+              <div className="field-grid field-grid--2">
+                <label className="field">
+                  <span className="field__label">原基金代码 / 名称</span>
+                  <div className="field__input-shell">
+                    <input type="text" value={summary.comparison.sourceCode} onChange={(event) => updateComparison('sourceCode', event.target.value)} />
+                  </div>
+                </label>
+                <label className="field">
+                  <span className="field__label">现基金代码 / 名称</span>
+                  <div className="field__input-shell">
+                    <input type="text" value={summary.comparison.targetCode} onChange={(event) => updateComparison('targetCode', event.target.value)} />
+                  </div>
+                </label>
+                <label className="field">
+                  <span className="field__label">原持有份额</span>
+                  <div className="field__input-shell">
+                    <input type="number" step="0.01" value={summary.comparison.sourceSellShares} onChange={(event) => updateComparison('sourceSellShares', event.target.value)} />
+                  </div>
+                </label>
+                <label className="field">
+                  <span className="field__label">原基金现价</span>
+                  <div className="field__input-shell">
+                    <input type="number" step="0.0001" value={summary.comparison.sourceCurrentPrice} onChange={(event) => updateComparison('sourceCurrentPrice', event.target.value)} />
+                  </div>
+                </label>
+                <label className="field">
+                  <span className="field__label">现持有份额</span>
+                  <div className="field__input-shell">
+                    <input type="number" step="0.01" value={summary.comparison.targetBuyShares} onChange={(event) => updateComparison('targetBuyShares', event.target.value)} />
+                  </div>
+                </label>
+                <label className="field">
+                  <span className="field__label">现基金现价</span>
+                  <div className="field__input-shell">
+                    <input type="number" step="0.0001" value={summary.comparison.targetCurrentPrice} onChange={(event) => updateComparison('targetCurrentPrice', event.target.value)} />
+                  </div>
+                </label>
+                <label className="field">
+                  <span className="field__label">买入总成本</span>
+                  <div className="field__input-shell">
+                    <input type="number" step="0.01" value={summary.comparison.switchCost} onChange={(event) => updateComparison('switchCost', event.target.value)} />
+                  </div>
+                </label>
+                <label className="field">
+                  <span className="field__label">额外补入现金</span>
+                  <div className="field__input-shell">
+                    <input type="number" step="0.01" value={summary.comparison.extraCash} onChange={(event) => updateComparison('extraCash', event.target.value)} />
+                  </div>
+                </label>
+                <label className="field">
+                  <span className="field__label">单笔手续费</span>
+                  <div className="field__input-shell">
+                    <input type="number" step="0.01" value={summary.feePerTrade} onChange={(event) => updateFeePerTrade(event.target.value)} />
+                  </div>
+                </label>
+                <label className="field">
+                  <span className="field__label">手续费笔数</span>
+                  <div className="field__input-shell">
+                    <input type="number" step="1" value={summary.comparison.feeTradeCount} onChange={(event) => updateComparison('feeTradeCount', event.target.value)} />
+                  </div>
+                </label>
+              </div>
+            </div>
+          ) : null}
+
           <div className="section-header">
             <div>
-              <div className="section-eyebrow">持仓明细确认</div>
-              <h2 className="section-title">持仓明细确认</h2>
+              <div className="section-eyebrow">明细编辑</div>
+              <h2 className="section-title">明细编辑</h2>
             </div>
             <div className="page-header__actions">
               <button className="button-secondary" type="button" onClick={addRow}>
@@ -467,7 +472,7 @@ export function FundSwitchExperience({ screen, links }) {
                 <tr>
                   <th>日期 (时间)</th>
                   <th>基金代码</th>
-                  <th>交易类型</th>
+                  <th className="fund-table__type-col">交易类型</th>
                   <th>单价 (价格)</th>
                   <th>份额 (股数)</th>
                   <th className="fund-table__action">操作</th>
@@ -482,7 +487,7 @@ export function FundSwitchExperience({ screen, links }) {
                     <td>
                       <input type="text" value={row.code} onChange={(event) => updateRow(index, 'code', event.target.value)} />
                     </td>
-                    <td>
+                    <td className="fund-table__type-col">
                       <select
                         className={row.type === '卖出' ? 'fund-table__type is-sell' : 'fund-table__type is-buy'}
                         value={row.type}

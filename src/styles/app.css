@@ -1479,6 +1479,27 @@ button {
   min-height: 100%;
 }
 
+.fund-inline-summary {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.fund-inline-summary__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.fund-logic-panel {
+  margin-bottom: 18px;
+  padding: 18px;
+  border-radius: 12px;
+  background: rgba(242, 244, 246, 0.72);
+  border: 1px solid rgba(194, 198, 214, 0.34);
+}
+
 .fund-table-wrap {
   overflow: auto;
 }
@@ -1515,6 +1536,11 @@ button {
   background: rgba(242, 244, 246, 0.8);
 }
 
+.fund-table__type-col {
+  width: 152px;
+  min-width: 152px;
+}
+
 .fund-table input,
 .fund-table select {
   width: 100%;
@@ -1538,11 +1564,12 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: auto;
-  min-height: 26px;
-  padding: 0 10px;
+  width: 100%;
+  min-width: 112px;
+  min-height: 34px;
+  padding: 0 14px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -1867,6 +1894,7 @@ button {
     overflow-x: auto;
   }
 
+  .fund-inline-summary__head,
   .field-grid--2,
   .step-row__fields,
   .stage-row__fields,

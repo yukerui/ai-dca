@@ -37,7 +37,7 @@ export async function recognizeFundSwitchFile(file, fallbackComparison, onProgre
   onProgress?.({
     status: 'loading',
     progress: 18,
-    message: '上传截图到 /api/ocr'
+    message: '正在上传截图'
   });
 
   const formData = new FormData();
@@ -47,7 +47,7 @@ export async function recognizeFundSwitchFile(file, fallbackComparison, onProgre
   onProgress?.({
     status: 'loading',
     progress: 46,
-    message: 'Cloudflare Worker 正在请求 Gemini'
+    message: '正在识别交易明细'
   });
 
   const response = await fetch(OCR_ENDPOINT, {
@@ -78,7 +78,7 @@ export async function recognizeFundSwitchFile(file, fallbackComparison, onProgre
   onProgress?.({
     status: 'loading',
     progress: 84,
-    message: 'Gemini 已返回，正在回填持仓明细'
+    message: '正在回填持仓明细'
   });
 
   const rows = Array.isArray(payload.rows) ? payload.rows : [];
