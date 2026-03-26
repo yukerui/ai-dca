@@ -1,4 +1,4 @@
-export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+export const DEFAULT_OCR_MODEL = 'gpt-5.4';
 export const PROMPT_VERSION = 'fund-switch-form-v1';
 
 export const FUND_SWITCH_RESPONSE_SCHEMA = {
@@ -75,7 +75,7 @@ export const FUND_SWITCH_SYSTEM_PROMPT = `
 - warnings 应该简短、具体，说明哪些字段有歧义、哪些行被跳过、是否存在裁剪或模糊。
 `.trim();
 
-export function buildGeminiUserPrompt(fileName = 'uploaded-image') {
+export function buildOcrUserPrompt(fileName = 'uploaded-image') {
   return [
     `请分析这张基金交易截图，并输出“持仓明细确认”表单 JSON。`,
     `文件名: ${fileName}`,

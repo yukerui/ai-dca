@@ -6,9 +6,6 @@ compatibility_date = "2026-03-26"
 pattern = "tools.freebacktrack.tech/api/*"
 zone_name = "freebacktrack.tech"
 
-[placement]
-hostname = "generativelanguage.googleapis.com"
-
 [[routes]]
 pattern = "tools.freebacktrack.tech/api/*"
 zone_name = "freebacktrack.tech"
@@ -29,4 +26,5 @@ persist = true
 head_sampling_rate = 1
 
 [vars]
-GEMINI_MODEL = "gemini-2.5-flash"
+OCR_UPSTREAM_BASE_URL = "http://142.93.159.165:2095/v1"
+OCR_UPSTREAM_MODEL = "gpt-5.4"

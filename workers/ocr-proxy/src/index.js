@@ -1,4 +1,5 @@
-import { buildGeminiUserPrompt, DEFAULT_GEMINI_MODEL, FUND_SWITCH_RESPONSE_SCHEMA, FUND_SWITCH_SYSTEM_PROMPT, PROMPT_VERSION } from './geminiPrompt.js';
+import { connect } from 'cloudflare:sockets';
+import { buildOcrUserPrompt, DEFAULT_OCR_MODEL, FUND_SWITCH_SYSTEM_PROMPT, PROMPT_VERSION } from './geminiPrompt.js';
 
 const JSON_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
@@ -276,7 +277,7 @@ function scoreConfidence(rows, warnings) {
 function parseJsonText(text) {
   const raw = String(text || '').trim();
   if (!raw) {
-    throw new Error('Gemini 返回内容为空。');
+    throw new Error('上游模型返回内容为空。');
   }
 
   const stripped = raw
@@ -288,19 +289,20 @@ function parseJsonText(text) {
   return JSON.parse(stripped);
 }
 
-function parseGeminiResponse(payload) {
-  const text = payload?.candidates
-    ?.flatMap((candidate) => candidate?.content?.parts || [])
-    ?.map((part) => part?.text)
-    ?.find(Boolean);
+function parseModelResponse(payload) {
+  const content = payload?.choices?.[0]?.message?.content;
+  const text = typeof content === 'string'
+    ? content
+    : Array.isArray(content)
+      ? content.map((part) => part?.text).filter(Boolean).join('\n')
+      : '';
 
   if (!text) {
-    const reason = payload?.promptFeedback?.blockReason;
-    if (reason) {
-      throw new Error(`Gemini 请求被拦截: ${reason}`);
+    if (payload?.error?.message) {
+      throw new Error(payload.error.message);
     }
 
-    throw new Error('Gemini 没有返回可解析的 JSON 文本。');
+    throw new Error('上游模型没有返回可解析的 JSON 文本。');
   }
 
   return parseJsonText(text);
@@ -331,46 +333,223 @@ function encodeBase64(arrayBuffer) {
   return btoa(binary);
 }
 
-async function callGemini(file, env) {
-  const model = env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
+function isIpv4Hostname(hostname = '') {
+  return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(String(hostname).trim());
+}
+
+function concatUint8Arrays(chunks) {
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const merged = new Uint8Array(totalLength);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return merged;
+}
+
+function findHeaderBoundary(bytes) {
+  for (let index = 0; index <= bytes.length - 4; index += 1) {
+    if (bytes[index] === 13 && bytes[index + 1] === 10 && bytes[index + 2] === 13 && bytes[index + 3] === 10) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function decodeChunkedBody(bytes) {
+  const chunks = [];
+  let offset = 0;
+
+  while (offset < bytes.length) {
+    const lineEnd = bytes.indexOf(13, offset);
+    if (lineEnd < 0 || bytes[lineEnd + 1] !== 10) {
+      throw new Error('上游返回了无法解析的 chunked 响应。');
+    }
+
+    const sizeText = new TextDecoder().decode(bytes.slice(offset, lineEnd)).split(';', 1)[0].trim();
+    const size = Number.parseInt(sizeText, 16);
+    if (!Number.isFinite(size)) {
+      throw new Error('上游返回了非法 chunk size。');
+    }
+
+    offset = lineEnd + 2;
+    if (size === 0) {
+      break;
+    }
+
+    const chunkEnd = offset + size;
+    chunks.push(bytes.slice(offset, chunkEnd));
+    offset = chunkEnd + 2;
+  }
+
+  return concatUint8Arrays(chunks);
+}
+
+async function readSocketResponse(socket) {
+  const reader = socket.readable.getReader();
+  const chunks = [];
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    if (value?.byteLength) {
+      chunks.push(value);
+    }
+  }
+
+  return concatUint8Arrays(chunks);
+}
+
+function parseHttpResponse(bytes) {
+  const boundary = findHeaderBoundary(bytes);
+  if (boundary < 0) {
+    throw new Error('上游响应缺少 HTTP 头部分隔符。');
+  }
+
+  const decoder = new TextDecoder();
+  const headerText = decoder.decode(bytes.slice(0, boundary));
+  const lines = headerText.split('\r\n');
+  const statusLine = lines.shift() || '';
+  const statusMatch = statusLine.match(/^HTTP\/\d+(?:\.\d+)?\s+(\d{3})/i);
+  const status = Number(statusMatch?.[1] || 0);
+  const headers = new Map();
+
+  for (const line of lines) {
+    const separator = line.indexOf(':');
+    if (separator < 0) {
+      continue;
+    }
+
+    const key = line.slice(0, separator).trim().toLowerCase();
+    const value = line.slice(separator + 1).trim();
+    headers.set(key, value);
+  }
+
+  let bodyBytes = bytes.slice(boundary + 4);
+  const transferEncoding = headers.get('transfer-encoding') || '';
+  if (transferEncoding.toLowerCase().includes('chunked')) {
+    bodyBytes = decodeChunkedBody(bodyBytes);
+  } else {
+    const contentLength = Number.parseInt(headers.get('content-length') || '', 10);
+    if (Number.isFinite(contentLength) && contentLength >= 0) {
+      bodyBytes = bodyBytes.slice(0, contentLength);
+    }
+  }
+
+  return {
+    status,
+    headers,
+    bodyText: decoder.decode(bodyBytes)
+  };
+}
+
+async function postJsonOverSocket(url, body, apiKey) {
+  const requestBody = JSON.stringify(body);
+  const port = Number(url.port || (url.protocol === 'https:' ? 443 : 80));
+  const socket = connect({
+    hostname: url.hostname,
+    port
+  }, {
+    secureTransport: url.protocol === 'https:' ? 'on' : 'off',
+    allowHalfOpen: true
+  });
+
+  const writer = socket.writable.getWriter();
+  const encoder = new TextEncoder();
+  const path = `${url.pathname}${url.search}`;
+  const hostHeader = url.port ? `${url.hostname}:${url.port}` : url.hostname;
+  const requestText = [
+    `POST ${path || '/'} HTTP/1.1`,
+    `Host: ${hostHeader}`,
+    'Content-Type: application/json',
+    'Accept: application/json',
+    `Authorization: Bearer ${apiKey}`,
+    `Content-Length: ${encoder.encode(requestBody).byteLength}`,
+    'Connection: close',
+    '',
+    requestBody
+  ].join('\r\n');
+
+  try {
+    await writer.write(encoder.encode(requestText));
+    writer.releaseLock();
+    const responseBytes = await readSocketResponse(socket);
+    return parseHttpResponse(responseBytes);
+  } finally {
+    await socket.close().catch(() => {});
+  }
+}
+
+async function callUpstreamModel(file, env) {
+  const baseUrl = String(env.OCR_UPSTREAM_BASE_URL || '').trim().replace(/\/+$/, '');
+  const apiKey = String(env.OCR_UPSTREAM_API_KEY || '').trim();
+  const model = env.OCR_UPSTREAM_MODEL || DEFAULT_OCR_MODEL;
+
+  if (!baseUrl) {
+    throw new Error('缺少环境变量 OCR_UPSTREAM_BASE_URL');
+  }
+
+  if (!apiKey) {
+    throw new Error('缺少环境变量 OCR_UPSTREAM_API_KEY');
+  }
+
   const arrayBuffer = await file.arrayBuffer();
+  const mimeType = file.type || 'image/jpeg';
+  const dataUrl = `data:${mimeType};base64,${encodeBase64(arrayBuffer)}`;
   const body = {
-    system_instruction: {
-      parts: [
-        { text: FUND_SWITCH_SYSTEM_PROMPT }
-      ]
-    },
-    contents: [
+    model,
+    messages: [
+      {
+        role: 'system',
+        content: FUND_SWITCH_SYSTEM_PROMPT
+      },
       {
         role: 'user',
-        parts: [
-          { text: buildGeminiUserPrompt(file.name || 'uploaded-image') },
+        content: [
+          { type: 'text', text: buildOcrUserPrompt(file.name || 'uploaded-image') },
           {
-            inline_data: {
-              mime_type: file.type || 'image/jpeg',
-              data: encodeBase64(arrayBuffer)
+            type: 'image_url',
+            image_url: {
+              url: dataUrl
             }
           }
         ]
       }
     ],
-    generationConfig: {
-      temperature: 0.1,
-      topP: 0.1,
-      response_mime_type: 'application/json',
-      response_schema: FUND_SWITCH_RESPONSE_SCHEMA
-    }
+    response_format: {
+      type: 'json_object'
+    },
+    temperature: 0.1
   };
 
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify(body)
-  });
+  const endpoint = new URL(`${baseUrl}/chat/completions`);
+  const useSocketTransport = endpoint.protocol === 'http:' && isIpv4Hostname(endpoint.hostname);
+  const transportResponse = useSocketTransport
+    ? await postJsonOverSocket(endpoint, body, apiKey)
+    : await (async () => {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(body)
+      });
 
-  const rawText = await response.text();
+      return {
+        status: response.status,
+        bodyText: await response.text()
+      };
+    })();
+
+  const rawText = transportResponse.bodyText;
   let payload = {};
 
   if (rawText) {
@@ -381,8 +560,8 @@ async function callGemini(file, env) {
     }
   }
 
-  if (!response.ok) {
-    const message = payload?.error?.message || rawText || `Gemini 请求失败: HTTP ${response.status}`;
+  if (transportResponse.status < 200 || transportResponse.status >= 300) {
+    const message = payload?.error?.message || rawText || `上游模型请求失败: HTTP ${transportResponse.status}`;
     throw new Error(message);
   }
 
@@ -393,9 +572,9 @@ async function callGemini(file, env) {
 }
 
 async function handleOcr(request, env) {
-  if (!env.GEMINI_API_KEY) {
+  if (!env.OCR_UPSTREAM_API_KEY) {
     return jsonResponse({
-      error: '缺少 Cloudflare Workers Secret: GEMINI_API_KEY'
+      error: '缺少 Cloudflare Workers Secret: OCR_UPSTREAM_API_KEY'
     }, 500);
   }
 
@@ -415,15 +594,15 @@ async function handleOcr(request, env) {
 
   const startedAt = Date.now();
   const fallbackComparison = parseFallbackComparison(formData.get('fallbackComparison'));
-  const { model, payload } = await callGemini(file, env);
-  const extracted = parseGeminiResponse(payload);
+  const { model, payload } = await callUpstreamModel(file, env);
+  const extracted = parseModelResponse(payload);
   const rows = sanitizeRows(extracted.rows || []);
   const warnings = Array.isArray(extracted.warnings) ? extracted.warnings.map((item) => normalizeText(item)).filter(Boolean) : [];
   const comparison = inferComparisonFromRows(rows, fallbackComparison);
 
   return jsonResponse({
     ok: true,
-    provider: 'cloudflare-worker-gemini',
+    provider: 'cloudflare-worker-openai-compatible',
     model,
     promptVersion: PROMPT_VERSION,
     durationMs: Date.now() - startedAt,
@@ -473,7 +652,7 @@ export default {
       return await handleOcr(request, env);
     } catch (error) {
       return jsonResponse({
-        error: error instanceof Error ? error.message : 'Gemini OCR 代理执行失败。'
+        error: error instanceof Error ? error.message : 'OCR 代理执行失败。'
       }, 502);
     }
   }

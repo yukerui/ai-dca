@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatCurrency } from '../app/accumulation.js';
 import { buildFundSwitchSummary, createEmptyFundSwitchRow, persistFundSwitchState, readFundSwitchState } from '../app/fundSwitch.js';
+import { findLatestNasdaqPrice, formatPriceAsOf, loadLatestNasdaqPrices } from '../app/nasdaqPrices.js';
 import { MaterialIcon } from '../components/MaterialIcon.jsx';
 import { SurfaceCard } from '../components/PageChrome.jsx';
 
@@ -98,19 +99,104 @@ function getAdvantageTone(value) {
   };
 }
 
-export function FundSwitchExperience({ links }) {
+function buildPriceFieldHelper(snapshot, priceState) {
+  if (snapshot) {
+    return `已自动同步分钟线现价，现价日期 ${formatPriceAsOf(snapshot)}。`;
+  }
+
+  if (priceState.status === 'loading' || priceState.status === 'idle') {
+    return '正在同步分钟线现价。';
+  }
+
+  if (priceState.status === 'error') {
+    return '分钟线现价加载失败，可手动输入。';
+  }
+
+  return '未匹配到分钟线现价，可手动输入。';
+}
+
+function buildMetricMeta(shares, currentPrice, snapshot) {
+  const base = `${shares} 份 × ${Number(currentPrice || 0).toFixed(4)}`;
+  return snapshot
+    ? `${base} · 现价日期 ${formatPriceAsOf(snapshot)}`
+    : `${base} · 手动现价`;
+}
+
+export function FundSwitchExperience({ links, inPagesDir }) {
   const [state, setState] = useState(() => readFundSwitchState());
   const [ocrState, setOcrState] = useState(() => createOcrState());
   const [showCalculationDetails, setShowCalculationDetails] = useState(false);
+  const [priceState, setPriceState] = useState(() => ({
+    status: 'idle',
+    entries: [],
+    error: ''
+  }));
   const fileInputRef = useRef(null);
-  const summary = useMemo(() => buildFundSwitchSummary(state), [state]);
+  const sourceSnapshot = useMemo(
+    () => findLatestNasdaqPrice(priceState.entries, state.comparison?.sourceCode),
+    [priceState.entries, state.comparison?.sourceCode]
+  );
+  const targetSnapshot = useMemo(
+    () => findLatestNasdaqPrice(priceState.entries, state.comparison?.targetCode),
+    [priceState.entries, state.comparison?.targetCode]
+  );
+  const resolvedComparison = useMemo(() => ({
+    ...state.comparison,
+    sourceCurrentPrice: Number(sourceSnapshot?.current_price) || Number(state.comparison?.sourceCurrentPrice) || 0,
+    targetCurrentPrice: Number(targetSnapshot?.current_price) || Number(state.comparison?.targetCurrentPrice) || 0
+  }), [state.comparison, sourceSnapshot, targetSnapshot]);
+  const summary = useMemo(() => buildFundSwitchSummary({
+    ...state,
+    comparison: resolvedComparison
+  }), [state, resolvedComparison]);
   const statusMeta = getStatusMeta(ocrState.status);
   const advantageMeta = getAdvantageTone(summary.switchAdvantage);
   const recognizedCount = Math.max(Number(state.recognizedRecords) || 0, summary.recordCount);
 
   useEffect(() => {
-    persistFundSwitchState(state, summary);
-  }, [state, summary]);
+    persistFundSwitchState({
+      ...state,
+      comparison: resolvedComparison
+    }, summary);
+  }, [state, resolvedComparison, summary]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setPriceState((current) => ({
+      status: current.entries.length ? 'success' : 'loading',
+      entries: current.entries,
+      error: ''
+    }));
+
+    loadLatestNasdaqPrices({ inPagesDir })
+      .then((entries) => {
+        if (cancelled) {
+          return;
+        }
+
+        setPriceState({
+          status: 'success',
+          entries,
+          error: ''
+        });
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        setPriceState({
+          status: 'error',
+          entries: [],
+          error: error instanceof Error ? error.message : '分钟线现价加载失败。'
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [inPagesDir]);
 
   function updateComparison(key, value) {
     setState((current) => ({
@@ -373,12 +459,12 @@ export function FundSwitchExperience({ links }) {
               <div className="fund-switch-metric">
                 <span className="fund-switch-metric__label">不切换现值</span>
                 <strong className="fund-switch-metric__value">{formatCurrency(summary.stayValue, '¥ ')}</strong>
-                <span className="fund-switch-metric__meta">{summary.comparison.sourceSellShares} 份 × {summary.comparison.sourceCurrentPrice.toFixed(4)}</span>
+                <span className="fund-switch-metric__meta">{buildMetricMeta(summary.comparison.sourceSellShares, summary.comparison.sourceCurrentPrice, sourceSnapshot)}</span>
               </div>
               <div className="fund-switch-metric">
                 <span className="fund-switch-metric__label">切换后现值</span>
                 <strong className="fund-switch-metric__value">{formatCurrency(summary.switchedValue, '¥ ')}</strong>
-                <span className="fund-switch-metric__meta">{summary.comparison.targetBuyShares} 份 × {summary.comparison.targetCurrentPrice.toFixed(4)}</span>
+                <span className="fund-switch-metric__meta">{buildMetricMeta(summary.comparison.targetBuyShares, summary.comparison.targetCurrentPrice, targetSnapshot)}</span>
               </div>
               <div className="fund-switch-metric">
                 <span className="fund-switch-metric__label">当前持仓浮盈</span>
@@ -570,9 +656,16 @@ export function FundSwitchExperience({ links }) {
               </label>
               <label className="field">
                 <span className="field__label">原基金现价</span>
-                <div className="field__input-shell">
-                  <input type="number" step="0.0001" value={summary.comparison.sourceCurrentPrice} onChange={(event) => updateComparison('sourceCurrentPrice', event.target.value)} />
+                <div className={sourceSnapshot ? 'field__input-shell is-readonly' : 'field__input-shell'}>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    readOnly={Boolean(sourceSnapshot)}
+                    value={summary.comparison.sourceCurrentPrice}
+                    onChange={(event) => updateComparison('sourceCurrentPrice', event.target.value)}
+                  />
                 </div>
+                <span className="field__helper">{buildPriceFieldHelper(sourceSnapshot, priceState)}</span>
               </label>
               <label className="field">
                 <span className="field__label">现持有份额</span>
@@ -582,9 +675,16 @@ export function FundSwitchExperience({ links }) {
               </label>
               <label className="field">
                 <span className="field__label">现基金现价</span>
-                <div className="field__input-shell">
-                  <input type="number" step="0.0001" value={summary.comparison.targetCurrentPrice} onChange={(event) => updateComparison('targetCurrentPrice', event.target.value)} />
+                <div className={targetSnapshot ? 'field__input-shell is-readonly' : 'field__input-shell'}>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    readOnly={Boolean(targetSnapshot)}
+                    value={summary.comparison.targetCurrentPrice}
+                    onChange={(event) => updateComparison('targetCurrentPrice', event.target.value)}
+                  />
                 </div>
+                <span className="field__helper">{buildPriceFieldHelper(targetSnapshot, priceState)}</span>
               </label>
               <label className="field">
                 <span className="field__label">买入总成本</span>

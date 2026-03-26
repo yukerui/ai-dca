@@ -10,6 +10,8 @@ const catalogPath = resolve(distDir, 'frontend', 'catalog.html');
 const distAssetsDir = resolve(distDir, 'react-assets');
 const docsPagesDir = resolve(docsDir, 'pages');
 const docsAssetsDir = resolve(docsDir, 'react-assets');
+const dataDir = resolve(root, 'data');
+const docsDataDir = resolve(docsDir, 'data');
 
 if (!existsSync(pageTemplatePath)) {
   throw new Error(`Missing built page template: ${pageTemplatePath}`);
@@ -42,6 +44,11 @@ writeFileSync(resolve(docsDir, 'catalog.html'), rootCatalog, 'utf8');
 
 rmSync(docsAssetsDir, { recursive: true, force: true });
 cpSync(distAssetsDir, docsAssetsDir, { recursive: true, force: true });
+
+rmSync(docsDataDir, { recursive: true, force: true });
+if (existsSync(dataDir)) {
+  cpSync(dataDir, docsDataDir, { recursive: true, force: true });
+}
 
 rmSync(resolve(docsDir, 'assets'), { recursive: true, force: true });
 rmSync(resolve(docsDir, 'ocr'), { recursive: true, force: true });

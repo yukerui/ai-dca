@@ -159,7 +159,8 @@ export function createTopTabs({ inPagesDir = false } = {}) {
   return [
     { key: 'home', label: '初始建仓', href: links.home },
     { key: 'accumEdit', label: '加仓', href: links.accumEdit },
-    { key: 'dca', label: '定投', href: links.dca }
+    { key: 'dca', label: '定投', href: links.dca },
+    { key: 'fundSwitch', label: '切换收益', href: links.fundSwitch }
   ];
 }
 
