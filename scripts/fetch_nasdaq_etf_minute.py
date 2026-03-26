@@ -35,6 +35,15 @@ NUMERIC_FIELDS = {
     "换手率": "turnover_rate",
 }
 
+SINA_NUMERIC_FIELDS = {
+    "open": "open",
+    "close": "close",
+    "high": "high",
+    "low": "low",
+    "volume": "volume",
+    "amount": "amount",
+}
+
 
 @dataclass(frozen=True)
 class Fund:
@@ -45,7 +54,7 @@ class Fund:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fetch Nasdaq ETF 1-minute bars with AkShare and store them under data/{fund_code}/{date}.json."
+        description="Fetch Nasdaq ETF 1-minute bars from Sina via AkShare and store them under data/{fund_code}/{date}.json."
     )
     parser.add_argument("--source-file", type=Path, help="Optional JSON file that contains the Nasdaq ETF list.")
     parser.add_argument("--output-dir", type=Path, default=Path("data"), help="Root output directory.")
@@ -195,21 +204,53 @@ def normalize_records(records: list[dict[str, Any]], target_date: str) -> list[d
     return normalized
 
 
+def normalize_sina_records(records: list[dict[str, Any]], target_date: str) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+
+    for row in records:
+        bar_time = normalize_datetime(row.get("day") or row.get("datetime") or row.get("date"), target_date)
+        if not bar_time or not bar_time.startswith(target_date):
+            continue
+
+        bar: dict[str, Any] = {"datetime": bar_time}
+        for source_name, output_name in SINA_NUMERIC_FIELDS.items():
+            parsed = coerce_number(row.get(source_name))
+            if parsed is not None:
+                bar[output_name] = parsed
+
+        amount = coerce_number(bar.get("amount"))
+        volume = coerce_number(bar.get("volume"))
+        if amount is not None and volume not in (None, 0):
+            avg_price = round(float(amount) / float(volume), 6)
+            bar["avg_price"] = int(avg_price) if float(avg_price).is_integer() else avg_price
+
+        normalized.append(bar)
+
+    return normalized
+
+
+def to_sina_symbol(fund_code: str) -> str:
+    code = str(fund_code).strip()
+    if not code:
+        raise ValueError("Fund code is required.")
+
+    if code.startswith(("5", "6", "9")):
+        return f"sh{code}"
+
+    return f"sz{code}"
+
+
 def fetch_minute_bars(fund: Fund, target_date: str, period: str, adjust: str) -> list[dict[str, Any]]:
-    start_time = f"{target_date} 09:30:00"
-    end_time = f"{target_date} 15:00:00"
-    frame = ak.fund_etf_hist_min_em(
-        symbol=fund.code,
+    frame = ak.stock_zh_a_minute(
+        symbol=to_sina_symbol(fund.code),
         period=period,
         adjust=adjust,
-        start_date=start_time,
-        end_date=end_time,
     )
 
     if frame is None or frame.empty:
         return []
 
-    return normalize_records(frame.to_dict(orient="records"), target_date)
+    return normalize_sina_records(frame.to_dict(orient="records"), target_date)
 
 
 def fetch_minute_bars_with_retry(
@@ -257,7 +298,7 @@ def write_output(output_root: Path, fund: Fund, target_date: str, source_path: P
         "period": period,
         "adjust": adjust,
         "timezone": "Asia/Shanghai",
-        "source": "akshare.fund_etf_hist_min_em",
+        "source": "akshare.stock_zh_a_minute",
         "fund_list_source": source_path.as_posix(),
         "generated_at": datetime.now(SHANGHAI_TZ).isoformat(),
         "bars": bars,
@@ -296,17 +337,17 @@ def write_latest_price_manifest(output_root: Path, source_path: Path, funds: lis
     snapshots: list[dict[str, Any]] = []
 
     for fund in funds:
-      fund_dir = output_root / fund.code
-      if not fund_dir.exists():
-        continue
+        fund_dir = output_root / fund.code
+        if not fund_dir.exists():
+            continue
 
-      candidates = sorted(path for path in fund_dir.glob("*.json") if path.is_file())
-      if not candidates:
-        continue
+        candidates = sorted(path for path in fund_dir.glob("*.json") if path.is_file())
+        if not candidates:
+            continue
 
-      snapshot = load_latest_snapshot(candidates[-1])
-      if snapshot:
-        snapshots.append(snapshot)
+        snapshot = load_latest_snapshot(candidates[-1])
+        if snapshot:
+            snapshots.append(snapshot)
 
     snapshots.sort(key=lambda item: item["code"])
     manifest = {

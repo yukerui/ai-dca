@@ -1,6 +1,6 @@
 {
   "dataset": "nasdaq_latest_prices",
-  "generated_at": "2026-03-26T16:46:02.438172+08:00",
+  "generated_at": "2026-03-26T17:51:14.806145+08:00",
   "fund_list_source": "data/all_nasdq.json",
   "count": 12,
   "funds": [
@@ -73,7 +73,7 @@
       "index_key": "nasdaq100",
       "date": "2026-03-26",
       "datetime": "2026-03-26 15:00:00",
-      "current_price": 1.716,
+      "current_price": 1.717,
       "output_path": "data/513100/2026-03-26.json"
     },
     {
@@ -82,7 +82,7 @@
       "index_key": "nasdaq100",
       "date": "2026-03-26",
       "datetime": "2026-03-26 15:00:00",
-      "current_price": 1.947,
+      "current_price": 1.946,
       "output_path": "data/513110/2026-03-26.json"
     },
     {
@@ -91,7 +91,7 @@
       "index_key": "nasdaq100",
       "date": "2026-03-26",
       "datetime": "2026-03-26 15:00:00",
-      "current_price": 2.116,
+      "current_price": 2.117,
       "output_path": "data/513300/2026-03-26.json"
     },
     {
@@ -100,7 +100,7 @@
       "index_key": "nasdaq100",
       "date": "2026-03-26",
       "datetime": "2026-03-26 15:00:00",
-      "current_price": 1.899,
+      "current_price": 1.898,
       "output_path": "data/513390/2026-03-26.json"
     },
     {
@@ -109,7 +109,7 @@
       "index_key": "nasdaq100",
       "date": "2026-03-26",
       "datetime": "2026-03-26 15:00:00",
-      "current_price": 1.615,
+      "current_price": 1.616,
       "output_path": "data/513870/2026-03-26.json"
     }
   ],
@@ -183,7 +183,7 @@
       "index_key": "nasdaq100",
       "date": "2026-03-26",
       "datetime": "2026-03-26 15:00:00",
-      "current_price": 1.716,
+      "current_price": 1.717,
       "output_path": "data/513100/2026-03-26.json"
     },
     "513110": {
@@ -192,7 +192,7 @@
       "index_key": "nasdaq100",
       "date": "2026-03-26",
       "datetime": "2026-03-26 15:00:00",
-      "current_price": 1.947,
+      "current_price": 1.946,
       "output_path": "data/513110/2026-03-26.json"
     },
     "513300": {
@@ -201,7 +201,7 @@
       "index_key": "nasdaq100",
       "date": "2026-03-26",
       "datetime": "2026-03-26 15:00:00",
-      "current_price": 2.116,
+      "current_price": 2.117,
       "output_path": "data/513300/2026-03-26.json"
     },
     "513390": {
@@ -210,7 +210,7 @@
       "index_key": "nasdaq100",
       "date": "2026-03-26",
       "datetime": "2026-03-26 15:00:00",
-      "current_price": 1.899,
+      "current_price": 1.898,
       "output_path": "data/513390/2026-03-26.json"
     },
     "513870": {
@@ -219,7 +219,7 @@
       "index_key": "nasdaq100",
       "date": "2026-03-26",
       "datetime": "2026-03-26 15:00:00",
-      "current_price": 1.615,
+      "current_price": 1.616,
       "output_path": "data/513870/2026-03-26.json"
     }
   }
