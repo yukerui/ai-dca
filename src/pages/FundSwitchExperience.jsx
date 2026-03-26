@@ -2,15 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatCurrency } from '../app/accumulation.js';
 import { buildFundSwitchSummary, createEmptyFundSwitchRow, persistFundSwitchState, readFundSwitchState } from '../app/fundSwitch.js';
 import { MaterialIcon } from '../components/MaterialIcon.jsx';
-import { StatusBadge, SurfaceCard, WorkspaceShell } from '../components/PageChrome.jsx';
-
-const sidebarItems = [
-  { label: 'Dashboard', icon: 'dashboard' },
-  { label: 'Fund Analysis', icon: 'analytics' },
-  { label: 'Data Import', icon: 'upload_file', active: true },
-  { label: 'History', icon: 'history' },
-  { label: 'Settings', icon: 'settings' }
-];
+import { SurfaceCard } from '../components/PageChrome.jsx';
 
 function createOcrState(overrides = {}) {
   return {
@@ -24,24 +16,49 @@ function createOcrState(overrides = {}) {
   };
 }
 
-function getStatusBadgeProps(status) {
+function getStatusMeta(status) {
   if (status === 'loading') {
-    return { tone: 'warning', icon: 'hourglass_top', label: '正在提取' };
+    return {
+      tone: 'warning',
+      icon: 'hourglass_top',
+      label: '正在识别',
+      detail: '正在提取截图中的交易记录，请稍候。'
+    };
   }
 
   if (status === 'error') {
-    return { tone: 'warning', icon: 'error', label: '导入失败' };
+    return {
+      tone: 'warning',
+      icon: 'error',
+      label: '识别失败',
+      detail: '请检查截图清晰度，或重新上传交易凭证。'
+    };
   }
 
   if (status === 'warning') {
-    return { tone: 'warning', icon: 'warning', label: '提取完成，需人工确认' };
+    return {
+      tone: 'warning',
+      icon: 'warning',
+      label: '已完成智能识别',
+      detail: '识别结果已回填，但仍有字段建议人工复核。'
+    };
   }
 
   if (status === 'success') {
-    return { tone: 'success', icon: 'check_circle', label: '导入成功，请确认数据' };
+    return {
+      tone: 'success',
+      icon: 'check_circle',
+      label: '已完成智能识别',
+      detail: '识别结果已回填为可编辑交易数据。'
+    };
   }
 
-  return { tone: 'warning', icon: 'upload_file', label: '等待导入截图' };
+  return {
+    tone: 'neutral',
+    icon: 'upload_file',
+    label: '待上传交易凭证',
+    detail: '支持 PNG / JPG / JPEG / WebP 格式的交易截图。'
+  };
 }
 
 function buildUploadBadge(fileName) {
@@ -49,18 +66,47 @@ function buildUploadBadge(fileName) {
   return extension || 'IMG';
 }
 
-export function FundSwitchExperience({ screen, links }) {
+function formatSignedCurrency(value, prefix = '¥ ') {
+  const absoluteValue = formatCurrency(Math.abs(value), prefix);
+  if (value > 0) {
+    return `+${absoluteValue}`;
+  }
+  if (value < 0) {
+    return `-${absoluteValue}`;
+  }
+  return absoluteValue;
+}
+
+function getAdvantageTone(value) {
+  if (value > 0) {
+    return {
+      className: 'is-positive',
+      label: '当前领先'
+    };
+  }
+
+  if (value < 0) {
+    return {
+      className: 'is-negative',
+      label: '当前落后'
+    };
+  }
+
+  return {
+    className: 'is-neutral',
+    label: '基本持平'
+  };
+}
+
+export function FundSwitchExperience({ links }) {
   const [state, setState] = useState(() => readFundSwitchState());
   const [ocrState, setOcrState] = useState(() => createOcrState());
-  const [ocrPreview, setOcrPreview] = useState([]);
   const [showCalculationDetails, setShowCalculationDetails] = useState(false);
   const fileInputRef = useRef(null);
   const summary = useMemo(() => buildFundSwitchSummary(state), [state]);
-  const workspaceTabs = [
-    { key: 'dataProcess', label: 'Data Processing', href: links.fundSwitch },
-    { key: 'yieldCalc', label: 'Yield Calculation', href: links.fundSwitch }
-  ];
-  const badge = getStatusBadgeProps(ocrState.status);
+  const statusMeta = getStatusMeta(ocrState.status);
+  const advantageMeta = getAdvantageTone(summary.switchAdvantage);
+  const recognizedCount = Math.max(Number(state.recognizedRecords) || 0, summary.recordCount);
 
   useEffect(() => {
     persistFundSwitchState(state, summary);
@@ -116,7 +162,6 @@ export function FundSwitchExperience({ screen, links }) {
   }
 
   async function processOcrFile(file) {
-    setOcrPreview([]);
     setOcrState(createOcrState({
       status: 'loading',
       progress: 12,
@@ -143,7 +188,6 @@ export function FundSwitchExperience({ screen, links }) {
           ...result.comparison
         }
       }));
-      setOcrPreview(result.previewLines);
 
       if (result.rows.length) {
         const hasWarnings = Array.isArray(result.warnings) && result.warnings.length > 0;
@@ -200,349 +244,402 @@ export function FundSwitchExperience({ screen, links }) {
   }
 
   return (
-    <WorkspaceShell
-      activeTab="yieldCalc"
-      brand="Fund Switch Assistant"
-      brandHref={links.fundSwitch}
-      tabs={workspaceTabs}
-      headerRight={
-        <>
-          <label className="toolbar-search" aria-label="Search data">
-            <MaterialIcon className="toolbar-search__icon" name="search" />
-            <input placeholder="Search data..." type="text" />
-          </label>
-          <button className="icon-button" type="button">
-            <MaterialIcon className="icon-button__icon" name="notifications" />
-          </button>
-          <button className="icon-button" type="button">
-            <MaterialIcon className="icon-button__icon" name="help_outline" />
-          </button>
-        </>
-      }
-      sidebar={
-        <>
-          <div className="sidebar-block">
-            <div className="sidebar-brand-card__title">Financial Architect</div>
-            <div className="sidebar-brand-card__meta">Fund Switch Assistant</div>
+    <div className="fund-switch-page">
+      <input
+        ref={fileInputRef}
+        accept="image/png,image/jpeg,image/jpg,image/webp"
+        hidden
+        onChange={handleFileInputChange}
+        type="file"
+      />
+
+      <section className="fund-switch-hero">
+        <div className="fund-switch-hero__intro">
+          <a className="fund-switch-backlink" href={links?.catalog || './catalog.html'}>
+            <MaterialIcon className="fund-switch-backlink__icon" name="west" />
+            返回页面目录
+          </a>
+          <div className="section-eyebrow">基金切换收益助手</div>
+          <h1 className="fund-switch-hero__title">基金切换收益助手</h1>
+          <p className="fund-switch-hero__subtitle">
+            上传交易截图后，系统会先整理成可编辑交易数据，再比较切换前后的真实收益。
+          </p>
+          <div className="fund-switch-hero__chips">
+            <span className={statusMeta.tone === 'warning' ? 'fund-switch-chip is-warning' : statusMeta.tone === 'success' ? 'fund-switch-chip is-success' : 'fund-switch-chip is-neutral'}>
+              <MaterialIcon className="fund-switch-chip__icon" filled={statusMeta.tone !== 'neutral'} name={statusMeta.icon} />
+              {statusMeta.label}
+            </span>
+            <span className="fund-switch-chip fund-switch-chip--ghost">
+              已同步 {recognizedCount} 条交易记录
+            </span>
           </div>
-          <div className="sidebar-menu">
-            {sidebarItems.map((item) => (
-              <a key={item.label} className={item.active ? 'sidebar-menu__item is-active' : 'sidebar-menu__item'} href={item.active ? links.fundSwitch : links.catalog}>
-                <MaterialIcon className="sidebar-menu__icon" name={item.icon} />
-                <span>{item.label}</span>
-              </a>
-            ))}
-          </div>
-          <div className="sidebar-footer">
-            <div className="sidebar-block">
-              <div className="sidebar-brand-card" style={{ padding: 0, boxShadow: 'none', background: 'transparent' }}>
-                <div className="avatar">JD</div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>User Profile</div>
-                  <div className="sidebar-brand-card__meta">Premium Member</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
-      }
-    >
-      <section className="page-header">
-        <div>
-          <h1 className="page-title page-title--compact">基金切换收益助手</h1>
         </div>
-        <StatusBadge icon={badge.icon} tone={badge.tone}>{badge.label}</StatusBadge>
+
+        <div className="fund-switch-hero__actions">
+          <button className="button-secondary" type="button" onClick={() => setShowCalculationDetails((value) => !value)}>
+            <MaterialIcon className="icon-button__icon" name={showCalculationDetails ? 'expand_less' : 'tune'} />
+            {showCalculationDetails ? '收起计算参数' : '查看计算参数'}
+          </button>
+          <button className="button-primary" type="button" onClick={openFilePicker}>
+            <MaterialIcon className="icon-button__icon" name="upload_file" />
+            上传交易凭证
+          </button>
+        </div>
       </section>
 
-      <section className="fund-switch-grid">
-        <div className="card-grid">
-          <SurfaceCard>
-            <input
-              ref={fileInputRef}
-              accept="image/png,image/jpeg,image/jpg,image/webp"
-              hidden
-              onChange={handleFileInputChange}
-              type="file"
-            />
-            <button
-              className={ocrState.status === 'loading' ? 'upload-dropzone is-loading' : 'upload-dropzone'}
-              onClick={openFilePicker}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              type="button"
-            >
-              <div className="upload-dropzone__icon">
-                <MaterialIcon className="upload-dropzone__icon-symbol" name={ocrState.status === 'loading' ? 'hourglass_top' : 'cloud_upload'} />
-              </div>
-              <div className="upload-dropzone__title">点击或拖拽上传交易截图</div>
-              <div className="upload-dropzone__copy">支持 PNG / JPG / JPEG / WebP</div>
-              <div className="upload-dropzone__hint">{ocrState.message}</div>
-            </button>
-          </SurfaceCard>
-
-          <SurfaceCard className="surface-card--tight">
-            <div className="section-header">
-              <div>
-                <div className="section-eyebrow">持仓明细</div>
-                <h2 className="section-title">持仓明细</h2>
-              </div>
-              <div className="table-note">
-                {ocrState.status === 'idle' ? '待开始' : `${ocrState.progress}%`}
-              </div>
-            </div>
-            <div className="progress-line" style={{ marginTop: 0 }}>
-              <div className="progress-line__track">
-                <div className="progress-line__value" style={{ width: `${ocrState.progress}%` }} />
-              </div>
-            </div>
-            <div className="ocr-file">
-              <div className="ocr-file__badge">{buildUploadBadge(ocrState.status === 'idle' ? '' : state.fileName)}</div>
-              <div className="ocr-file__body">
-                <strong>{ocrState.status === 'idle' ? '未上传图片' : state.fileName}</strong>
-                <span>
-                  {ocrState.status === 'error'
-                    ? ocrState.error
-                    : ocrState.status === 'success' || ocrState.status === 'warning'
-                      ? `返回 ${Math.max(ocrState.lineCount, 0)} 条可回填记录，当前表单已同步 ${Math.max(state.recognizedRecords, 0)} 条交易记录`
-                      : '上传后会自动整理日期、基金名称、交易方向、单价和份额'}
-                </span>
-              </div>
-              <MaterialIcon className="ocr-file__check" filled name={ocrState.status === 'error' ? 'error' : ocrState.status === 'loading' ? 'hourglass_top' : 'check_circle'} />
-            </div>
-            {ocrPreview.length ? (
-              <div className="ocr-preview">
-                {ocrPreview.map((line) => (
-                  <div key={line} className="ocr-preview__line">{line}</div>
-                ))}
-              </div>
-            ) : null}
-          </SurfaceCard>
-
-          <SurfaceCard className="surface-card--tight fund-result-card">
-            <div className="section-header">
-              <div>
-                <div className="section-eyebrow">结果输出</div>
-                <h2 className="section-title">收益助手结论</h2>
-              </div>
-            </div>
-            <div className="result-grid">
-              <div className="result-tile">
-                <span className="result-tile__label">不切换现在价值</span>
-                <strong className="result-tile__value">{formatCurrency(summary.stayValue, '¥ ')}</strong>
-                <span className="result-tile__meta">{summary.comparison.sourceSellShares} 份 × {summary.comparison.sourceCurrentPrice.toFixed(4)}</span>
-              </div>
-              <div className="result-tile">
-                <span className="result-tile__label">切换后现在价值</span>
-                <strong className="result-tile__value">{formatCurrency(summary.switchedValue, '¥ ')}</strong>
-                <span className="result-tile__meta">{summary.comparison.targetBuyShares} 份 × {summary.comparison.targetCurrentPrice.toFixed(4)}</span>
-              </div>
-              <div className="result-tile result-tile--accent">
-                <span className="result-tile__label">当前持仓浮盈</span>
-                <strong className="result-tile__value">{formatCurrency(summary.switchedPositionProfit, '¥ ')}</strong>
-                <span className="result-tile__meta">切换后现值 - 买入总成本 - 手续费</span>
-              </div>
-              <div className={summary.switchAdvantage >= 0 ? 'result-tile result-tile--success' : 'result-tile result-tile--warning'}>
-                <span className="result-tile__label">切换额外收益</span>
-                <strong className="result-tile__value">{formatCurrency(summary.switchAdvantage, '¥ ')}</strong>
-                <span className="result-tile__meta">切换后现值 - 不切换现值 - 补现金 - 手续费</span>
-              </div>
-            </div>
-          </SurfaceCard>
-        </div>
-
-        <SurfaceCard className="fund-table-card">
-          <div className="fund-inline-summary summary-tile summary-tile--blue">
-            <div className="fund-inline-summary__head">
-              <div>
-                <div className="section-eyebrow">模型提取引擎</div>
-                <div className="section-title" style={{ color: 'inherit', marginTop: 4 }}>模型提取引擎</div>
-              </div>
-              <button className="button-secondary" type="button" onClick={() => setShowCalculationDetails((value) => !value)}>
-                {showCalculationDetails ? '收起计算逻辑' : '查看计算逻辑'}
-              </button>
-            </div>
-            <div className="summary-lines summary-lines--compact">
-              <div className="summary-lines__row">
-                <span>不切换现值</span>
-                <strong>{formatCurrency(summary.stayValue, '¥ ')}</strong>
-              </div>
-              <div className="summary-lines__row">
-                <span>切换后现值</span>
-                <strong>{formatCurrency(summary.switchedValue, '¥ ')}</strong>
-              </div>
-              <div className="summary-lines__row">
-                <span>接口耗时</span>
-                <strong>{ocrState.durationMs ? `${ocrState.durationMs} ms` : '等待接口返回'}</strong>
-              </div>
-            </div>
-          </div>
-
-          {showCalculationDetails ? (
-            <div className="fund-logic-panel">
-              <div className="section-header">
-                <div>
-                  <div className="section-eyebrow">收益计算参数</div>
-                  <h2 className="section-title">切换收益比较</h2>
-                </div>
-              </div>
-              <div className="field-grid field-grid--2">
-                <label className="field">
-                  <span className="field__label">原基金代码 / 名称</span>
-                  <div className="field__input-shell">
-                    <input type="text" value={summary.comparison.sourceCode} onChange={(event) => updateComparison('sourceCode', event.target.value)} />
-                  </div>
-                </label>
-                <label className="field">
-                  <span className="field__label">现基金代码 / 名称</span>
-                  <div className="field__input-shell">
-                    <input type="text" value={summary.comparison.targetCode} onChange={(event) => updateComparison('targetCode', event.target.value)} />
-                  </div>
-                </label>
-                <label className="field">
-                  <span className="field__label">原持有份额</span>
-                  <div className="field__input-shell">
-                    <input type="number" step="0.01" value={summary.comparison.sourceSellShares} onChange={(event) => updateComparison('sourceSellShares', event.target.value)} />
-                  </div>
-                </label>
-                <label className="field">
-                  <span className="field__label">原基金现价</span>
-                  <div className="field__input-shell">
-                    <input type="number" step="0.0001" value={summary.comparison.sourceCurrentPrice} onChange={(event) => updateComparison('sourceCurrentPrice', event.target.value)} />
-                  </div>
-                </label>
-                <label className="field">
-                  <span className="field__label">现持有份额</span>
-                  <div className="field__input-shell">
-                    <input type="number" step="0.01" value={summary.comparison.targetBuyShares} onChange={(event) => updateComparison('targetBuyShares', event.target.value)} />
-                  </div>
-                </label>
-                <label className="field">
-                  <span className="field__label">现基金现价</span>
-                  <div className="field__input-shell">
-                    <input type="number" step="0.0001" value={summary.comparison.targetCurrentPrice} onChange={(event) => updateComparison('targetCurrentPrice', event.target.value)} />
-                  </div>
-                </label>
-                <label className="field">
-                  <span className="field__label">买入总成本</span>
-                  <div className="field__input-shell">
-                    <input type="number" step="0.01" value={summary.comparison.switchCost} onChange={(event) => updateComparison('switchCost', event.target.value)} />
-                  </div>
-                </label>
-                <label className="field">
-                  <span className="field__label">额外补入现金</span>
-                  <div className="field__input-shell">
-                    <input type="number" step="0.01" value={summary.comparison.extraCash} onChange={(event) => updateComparison('extraCash', event.target.value)} />
-                  </div>
-                </label>
-                <label className="field">
-                  <span className="field__label">单笔手续费</span>
-                  <div className="field__input-shell">
-                    <input type="number" step="0.01" value={summary.feePerTrade} onChange={(event) => updateFeePerTrade(event.target.value)} />
-                  </div>
-                </label>
-                <label className="field">
-                  <span className="field__label">手续费笔数</span>
-                  <div className="field__input-shell">
-                    <input type="number" step="1" value={summary.comparison.feeTradeCount} onChange={(event) => updateComparison('feeTradeCount', event.target.value)} />
-                  </div>
-                </label>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="section-header">
+      <section className="fund-switch-layout">
+        <SurfaceCard className="fund-switch-surface fund-switch-upload-card">
+          <div className="fund-switch-section-head">
             <div>
-              <div className="section-eyebrow">明细编辑</div>
-              <h2 className="section-title">明细编辑</h2>
+              <div className="section-eyebrow">上传与识别</div>
+              <h2 className="section-title">交易凭证导入</h2>
             </div>
-            <div className="page-header__actions">
-              <button className="button-secondary" type="button" onClick={addRow}>
-                <MaterialIcon className="icon-button__icon" name="add" />
-                新增记录
-              </button>
-              <button className="button-secondary" type="button">
-                <MaterialIcon className="icon-button__icon" name="download" />
-                导出模板
-              </button>
+            <span className="table-note">{ocrState.status === 'idle' ? '待上传' : `${ocrState.progress}%`}</span>
+          </div>
+
+          <button
+            className={ocrState.status === 'loading' ? 'upload-dropzone is-loading' : 'upload-dropzone'}
+            onClick={openFilePicker}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            type="button"
+          >
+            <div className="upload-dropzone__icon">
+              <MaterialIcon className="upload-dropzone__icon-symbol" name={ocrState.status === 'loading' ? 'hourglass_top' : 'cloud_upload'} />
+            </div>
+            <div className="upload-dropzone__title">点击或拖拽上传交易截图</div>
+            <div className="upload-dropzone__copy">支持 PNG / JPG / JPEG / WebP</div>
+            <div className="upload-dropzone__hint">{ocrState.message}</div>
+          </button>
+
+          <div className="progress-line">
+            <div className="progress-line__head">
+              <span>识别进度</span>
+              <strong>{ocrState.status === 'idle' ? '待上传' : `${ocrState.progress}%`}</strong>
+            </div>
+            <div className="progress-line__track">
+              <div className="progress-line__value" style={{ width: `${ocrState.progress}%` }} />
             </div>
           </div>
-          <div className="fund-table-wrap">
-            <table className="fund-table">
-              <thead>
-                <tr>
-                  <th>日期 (时间)</th>
-                  <th>基金代码</th>
-                  <th className="fund-table__type-col">交易类型</th>
-                  <th>单价 (价格)</th>
-                  <th>份额 (股数)</th>
-                  <th className="fund-table__action">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.rows.map((row, index) => (
-                  <tr key={row.id} className={index % 2 === 1 ? 'is-striped' : ''}>
-                    <td>
-                      <input type="text" value={row.date} onChange={(event) => updateRow(index, 'date', event.target.value)} />
-                    </td>
-                    <td>
-                      <input type="text" value={row.code} onChange={(event) => updateRow(index, 'code', event.target.value)} />
-                    </td>
-                    <td className="fund-table__type-col">
-                      <select
-                        className={row.type === '卖出' ? 'fund-table__type is-sell' : 'fund-table__type is-buy'}
-                        value={row.type}
-                        onChange={(event) => updateRow(index, 'type', event.target.value)}
-                      >
-                        <option value="卖出">卖出</option>
-                        <option value="买入">买入</option>
-                      </select>
-                    </td>
-                    <td>
-                      <input type="number" step="0.0001" value={row.price} onChange={(event) => updateRow(index, 'price', event.target.value)} />
-                    </td>
-                    <td>
-                      <input type="number" step="0.01" value={row.shares} onChange={(event) => updateRow(index, 'shares', event.target.value)} />
-                    </td>
-                    <td className="fund-table__action">
-                      <button className="icon-button" type="button" onClick={() => removeRow(index)}>
-                        <MaterialIcon className="icon-button__icon" name="delete_outline" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+          <div className="ocr-file">
+            <div className="ocr-file__badge">{buildUploadBadge(ocrState.status === 'idle' ? '' : state.fileName)}</div>
+            <div className="ocr-file__body">
+              <strong>{ocrState.status === 'idle' ? '暂未上传交易凭证' : state.fileName}</strong>
+              <span>
+                {ocrState.status === 'error'
+                  ? ocrState.error
+                  : ocrState.status === 'success' || ocrState.status === 'warning'
+                    ? `已回填 ${recognizedCount} 条交易记录，可直接在下方继续修改。`
+                    : statusMeta.detail}
+              </span>
+            </div>
+            <MaterialIcon className="ocr-file__check" filled name={statusMeta.icon} />
+          </div>
+
+          <div className="fund-switch-upload-stats">
+            <div className="fund-switch-stat">
+              <span className="fund-switch-stat__label">识别状态</span>
+              <strong className="fund-switch-stat__value">{statusMeta.label}</strong>
+            </div>
+            <div className="fund-switch-stat">
+              <span className="fund-switch-stat__label">解析耗时</span>
+              <strong className="fund-switch-stat__value">{ocrState.durationMs ? `${ocrState.durationMs} ms` : '等待返回'}</strong>
+            </div>
+            <div className="fund-switch-stat">
+              <span className="fund-switch-stat__label">可回填记录</span>
+              <strong className="fund-switch-stat__value">{recognizedCount} 条</strong>
+            </div>
+          </div>
+        </SurfaceCard>
+
+        <SurfaceCard className="fund-switch-surface fund-switch-summary-card">
+          <div className="fund-switch-section-head">
+            <div>
+              <div className="section-eyebrow">结论摘要</div>
+              <h2 className="section-title">当前切换判断</h2>
+            </div>
+            <span className={`fund-switch-summary__chip ${advantageMeta.className}`}>{advantageMeta.label}</span>
+          </div>
+
+          <div className="fund-switch-summary">
+            <div className="fund-switch-summary__main">
+              <span className="fund-switch-summary__label">切换额外收益</span>
+              <strong className="fund-switch-summary__value">{formatSignedCurrency(summary.switchAdvantage, '¥ ')}</strong>
+              <p className="fund-switch-summary__formula">切换后现值 - 不切换现值 - 额外补入现金 - 手续费</p>
+            </div>
+
+            <div className="fund-switch-metric-grid">
+              <div className="fund-switch-metric">
+                <span className="fund-switch-metric__label">不切换现值</span>
+                <strong className="fund-switch-metric__value">{formatCurrency(summary.stayValue, '¥ ')}</strong>
+                <span className="fund-switch-metric__meta">{summary.comparison.sourceSellShares} 份 × {summary.comparison.sourceCurrentPrice.toFixed(4)}</span>
+              </div>
+              <div className="fund-switch-metric">
+                <span className="fund-switch-metric__label">切换后现值</span>
+                <strong className="fund-switch-metric__value">{formatCurrency(summary.switchedValue, '¥ ')}</strong>
+                <span className="fund-switch-metric__meta">{summary.comparison.targetBuyShares} 份 × {summary.comparison.targetCurrentPrice.toFixed(4)}</span>
+              </div>
+              <div className="fund-switch-metric">
+                <span className="fund-switch-metric__label">当前持仓浮盈</span>
+                <strong className="fund-switch-metric__value">{formatSignedCurrency(summary.switchedPositionProfit, '¥ ')}</strong>
+                <span className="fund-switch-metric__meta">切换后现值 - 买入总成本 - 手续费</span>
+              </div>
+              <div className="fund-switch-metric">
+                <span className="fund-switch-metric__label">预估处理金额</span>
+                <strong className="fund-switch-metric__value">{formatCurrency(summary.processedAmount, '¥ ')}</strong>
+                <span className="fund-switch-metric__meta">已识别交易记录对应的累计成交金额</span>
+              </div>
+            </div>
           </div>
         </SurfaceCard>
       </section>
 
-      <footer className="fund-footer">
-        <div className="fund-footer__meta">
+      <SurfaceCard className="fund-switch-surface fund-switch-data-card">
+        <div className="fund-switch-section-head">
           <div>
-            <div className="section-eyebrow">汇总记录</div>
-            <div className="fund-footer__value">{summary.recordCount} 条识别记录</div>
+            <div className="section-eyebrow">交易数据校准</div>
+            <h2 className="section-title">交易数据（可编辑）</h2>
           </div>
-          <div className="fund-footer__divider" />
-          <div>
-            <div className="section-eyebrow">预估处理金额</div>
-            <div className="fund-footer__value fund-footer__value--primary">{formatCurrency(summary.processedAmount, '¥ ')}</div>
-          </div>
-          <div className="fund-footer__divider" />
-          <div>
-            <div className="section-eyebrow">真实额外收益</div>
-            <div className={summary.switchAdvantage >= 0 ? 'fund-footer__value fund-footer__value--success' : 'fund-footer__value fund-footer__value--warning'}>
-              {formatCurrency(summary.switchAdvantage, '¥ ')}
-            </div>
+          <div className="page-header__actions">
+            <button className="button-secondary" type="button" onClick={addRow}>
+              <MaterialIcon className="icon-button__icon" name="add" />
+              新增条目
+            </button>
+            <button className="button-secondary" type="button" onClick={openFilePicker}>
+              <MaterialIcon className="icon-button__icon" name="upload_file" />
+              重新上传
+            </button>
           </div>
         </div>
-        <div className="fund-footer__actions">
-          <button className="button-outline" type="button" onClick={() => setOcrPreview([])}>取消导入</button>
+        <div className="table-note fund-switch-section-note">
+          截图识别完成后，结果会直接回填到这里。你可以继续修改日期、基金代码、交易方向、价格和份额。
+        </div>
+
+        <div className="fund-table-wrap fund-table-wrap--desktop">
+          <table className="fund-table">
+            <thead>
+              <tr>
+                <th>日期 (时间)</th>
+                <th>基金代码</th>
+                <th className="fund-table__type-col">交易类型</th>
+                <th>单价 (价格)</th>
+                <th>份额 (股数)</th>
+                <th className="fund-table__action">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {summary.rows.map((row, index) => (
+                <tr key={row.id} className={index % 2 === 1 ? 'is-striped' : ''}>
+                  <td>
+                    <input type="text" value={row.date} onChange={(event) => updateRow(index, 'date', event.target.value)} />
+                  </td>
+                  <td>
+                    <input type="text" value={row.code} onChange={(event) => updateRow(index, 'code', event.target.value)} />
+                  </td>
+                  <td className="fund-table__type-col">
+                    <select
+                      className={row.type === '卖出' ? 'fund-table__type is-sell' : 'fund-table__type is-buy'}
+                      value={row.type}
+                      onChange={(event) => updateRow(index, 'type', event.target.value)}
+                    >
+                      <option value="卖出">卖出</option>
+                      <option value="买入">买入</option>
+                    </select>
+                  </td>
+                  <td>
+                    <input type="number" step="0.0001" value={row.price} onChange={(event) => updateRow(index, 'price', event.target.value)} />
+                  </td>
+                  <td>
+                    <input type="number" step="0.01" value={row.shares} onChange={(event) => updateRow(index, 'shares', event.target.value)} />
+                  </td>
+                  <td className="fund-table__action">
+                    <button className="icon-button" type="button" aria-label="删除条目" onClick={() => removeRow(index)}>
+                      <MaterialIcon className="icon-button__icon" name="delete_outline" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="fund-record-list">
+          {summary.rows.map((row, index) => (
+            <div key={row.id} className="fund-record-card">
+              <div className="fund-record-card__head">
+                <div>
+                  <div className="section-eyebrow">第 {index + 1} 条记录</div>
+                  <div className="fund-record-card__title">{row.code || '待填写基金代码'}</div>
+                </div>
+                <button className="icon-button" type="button" aria-label="删除条目" onClick={() => removeRow(index)}>
+                  <MaterialIcon className="icon-button__icon" name="delete_outline" />
+                </button>
+              </div>
+              <div className="field-grid">
+                <label className="field">
+                  <span className="field__label">日期 (时间)</span>
+                  <div className="field__input-shell">
+                    <input type="text" value={row.date} onChange={(event) => updateRow(index, 'date', event.target.value)} />
+                  </div>
+                </label>
+                <label className="field">
+                  <span className="field__label">基金代码</span>
+                  <div className="field__input-shell">
+                    <input type="text" value={row.code} onChange={(event) => updateRow(index, 'code', event.target.value)} />
+                  </div>
+                </label>
+                <label className="field">
+                  <span className="field__label">交易类型</span>
+                  <div className="field__input-shell">
+                    <select value={row.type} onChange={(event) => updateRow(index, 'type', event.target.value)}>
+                      <option value="卖出">卖出</option>
+                      <option value="买入">买入</option>
+                    </select>
+                  </div>
+                </label>
+                <label className="field">
+                  <span className="field__label">单价 (价格)</span>
+                  <div className="field__input-shell">
+                    <input type="number" step="0.0001" value={row.price} onChange={(event) => updateRow(index, 'price', event.target.value)} />
+                  </div>
+                </label>
+                <label className="field">
+                  <span className="field__label">份额 (股数)</span>
+                  <div className="field__input-shell">
+                    <input type="number" step="0.01" value={row.shares} onChange={(event) => updateRow(index, 'shares', event.target.value)} />
+                  </div>
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+      </SurfaceCard>
+
+      <SurfaceCard className="fund-switch-surface fund-switch-logic-card">
+        <div className="fund-switch-section-head">
+          <div>
+            <div className="section-eyebrow">成本与费用</div>
+            <h2 className="section-title">计算参数</h2>
+          </div>
+          <button className="button-secondary" type="button" onClick={() => setShowCalculationDetails((value) => !value)}>
+            <MaterialIcon className="icon-button__icon" name={showCalculationDetails ? 'expand_less' : 'expand_more'} />
+            {showCalculationDetails ? '收起详细参数' : '展开详细参数'}
+          </button>
+        </div>
+
+        <div className="fund-switch-logic-summary">
+          <div className="fund-switch-logic-pill">
+            <span>不切换现值</span>
+            <strong>{formatCurrency(summary.stayValue, '¥ ')}</strong>
+          </div>
+          <div className="fund-switch-logic-pill">
+            <span>切换后现值</span>
+            <strong>{formatCurrency(summary.switchedValue, '¥ ')}</strong>
+          </div>
+          <div className="fund-switch-logic-pill">
+            <span>手续费合计</span>
+            <strong>{formatCurrency(summary.feeTotal, '¥ ')}</strong>
+          </div>
+          <div className="fund-switch-logic-pill">
+            <span>额外补入现金</span>
+            <strong>{formatCurrency(summary.comparison.extraCash, '¥ ')}</strong>
+          </div>
+        </div>
+
+        {showCalculationDetails ? (
+          <div className="fund-logic-panel fund-switch-form-panel">
+            <div className="field-grid field-grid--2">
+              <label className="field">
+                <span className="field__label">原基金代码 / 名称</span>
+                <div className="field__input-shell">
+                  <input type="text" value={summary.comparison.sourceCode} onChange={(event) => updateComparison('sourceCode', event.target.value)} />
+                </div>
+              </label>
+              <label className="field">
+                <span className="field__label">现基金代码 / 名称</span>
+                <div className="field__input-shell">
+                  <input type="text" value={summary.comparison.targetCode} onChange={(event) => updateComparison('targetCode', event.target.value)} />
+                </div>
+              </label>
+              <label className="field">
+                <span className="field__label">原持有份额</span>
+                <div className="field__input-shell">
+                  <input type="number" step="0.01" value={summary.comparison.sourceSellShares} onChange={(event) => updateComparison('sourceSellShares', event.target.value)} />
+                </div>
+              </label>
+              <label className="field">
+                <span className="field__label">原基金现价</span>
+                <div className="field__input-shell">
+                  <input type="number" step="0.0001" value={summary.comparison.sourceCurrentPrice} onChange={(event) => updateComparison('sourceCurrentPrice', event.target.value)} />
+                </div>
+              </label>
+              <label className="field">
+                <span className="field__label">现持有份额</span>
+                <div className="field__input-shell">
+                  <input type="number" step="0.01" value={summary.comparison.targetBuyShares} onChange={(event) => updateComparison('targetBuyShares', event.target.value)} />
+                </div>
+              </label>
+              <label className="field">
+                <span className="field__label">现基金现价</span>
+                <div className="field__input-shell">
+                  <input type="number" step="0.0001" value={summary.comparison.targetCurrentPrice} onChange={(event) => updateComparison('targetCurrentPrice', event.target.value)} />
+                </div>
+              </label>
+              <label className="field">
+                <span className="field__label">买入总成本</span>
+                <div className="field__input-shell">
+                  <input type="number" step="0.01" value={summary.comparison.switchCost} onChange={(event) => updateComparison('switchCost', event.target.value)} />
+                </div>
+              </label>
+              <label className="field">
+                <span className="field__label">额外补入现金</span>
+                <div className="field__input-shell">
+                  <input type="number" step="0.01" value={summary.comparison.extraCash} onChange={(event) => updateComparison('extraCash', event.target.value)} />
+                </div>
+              </label>
+              <label className="field">
+                <span className="field__label">单笔手续费</span>
+                <div className="field__input-shell">
+                  <input type="number" step="0.01" value={summary.feePerTrade} onChange={(event) => updateFeePerTrade(event.target.value)} />
+                </div>
+              </label>
+              <label className="field">
+                <span className="field__label">手续费笔数</span>
+                <div className="field__input-shell">
+                  <input type="number" step="1" value={summary.comparison.feeTradeCount} onChange={(event) => updateComparison('feeTradeCount', event.target.value)} />
+                </div>
+              </label>
+            </div>
+          </div>
+        ) : null}
+      </SurfaceCard>
+
+      <footer className="fund-switch-footer">
+        <div className="fund-switch-footer__meta">
+          <div>
+            <div className="section-eyebrow">识别记录</div>
+            <div className="fund-switch-footer__value">{recognizedCount} 条</div>
+          </div>
+          <div className="fund-switch-footer__divider" />
+          <div>
+            <div className="section-eyebrow">预估处理金额</div>
+            <div className="fund-switch-footer__value">{formatCurrency(summary.processedAmount, '¥ ')}</div>
+          </div>
+          <div className="fund-switch-footer__divider" />
+          <div>
+            <div className="section-eyebrow">真实额外收益</div>
+            <div className={`fund-switch-footer__value ${advantageMeta.className}`}>{formatSignedCurrency(summary.switchAdvantage, '¥ ')}</div>
+          </div>
+        </div>
+        <div className="fund-switch-footer__actions">
+          <button className="button-outline" type="button" onClick={openFilePicker}>重新上传</button>
           <button className="button-primary" type="button">
             确认导入并计算收益
             <MaterialIcon className="icon-button__icon" name="arrow_forward" />
           </button>
         </div>
       </footer>
-    </WorkspaceShell>
+    </div>
   );
 }
