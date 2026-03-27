@@ -166,6 +166,77 @@ function formatPositionMeta(position, snapshot) {
   return `${position.code} · ${position.shares} 份 · 待补现价`;
 }
 
+function roundToCurrency(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+function hasMeaningfulRowContent(row) {
+  return Boolean(
+    String(row?.date || '').trim()
+      || String(row?.code || '').trim()
+      || Number(row?.price) > 0
+      || Number(row?.shares) > 0
+      || Number(row?.amount) > 0
+  );
+}
+
+function isValidRowDate(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    return false;
+  }
+
+  return Number.isFinite(Date.parse(normalized.replace(' ', 'T')));
+}
+
+function buildRowValidationIssues(rows = []) {
+  const normalizedRows = (Array.isArray(rows) ? rows : []).filter((row) => hasMeaningfulRowContent(row));
+  if (!normalizedRows.length) {
+    return ['请至少保留一条有效交易记录。'];
+  }
+
+  const issues = [];
+  normalizedRows.forEach((row, index) => {
+    const rowLabel = `第 ${index + 1} 条记录`;
+    const price = Number(row?.price) || 0;
+    const shares = Number(row?.shares) || 0;
+    const amount = Number(row?.amount) || 0;
+    const expectedAmount = roundToCurrency(price * shares);
+
+    if (!isValidRowDate(row?.date)) {
+      issues.push(`${rowLabel} 日期不完整或格式不正确。`);
+    }
+    if (getFundCodeError(row?.code)) {
+      issues.push(`${rowLabel} 基金代码必须是 6 位纯数字。`);
+    }
+    if (row?.type !== '买入' && row?.type !== '卖出') {
+      issues.push(`${rowLabel} 交易类型不正确。`);
+    }
+    if (price <= 0) {
+      issues.push(`${rowLabel} 价格必须大于 0。`);
+    }
+    if (shares <= 0) {
+      issues.push(`${rowLabel} 份额必须大于 0。`);
+    }
+    if (amount <= 0) {
+      issues.push(`${rowLabel} 成交额不能为空。`);
+    } else if (price > 0 && shares > 0 && Math.abs(amount - expectedAmount) > 0.05) {
+      issues.push(`${rowLabel} 成交额与价格份额不一致。`);
+    }
+  });
+
+  return issues;
+}
+
+function summarizeValidationIssues(issues = []) {
+  if (!issues.length) {
+    return '';
+  }
+
+  const preview = issues.slice(0, 2).join('；');
+  return issues.length > 2 ? `${preview}；另有 ${issues.length - 2} 项待修正。` : preview;
+}
+
 function buildOcrPreviewRows(rows = []) {
   const previewRows = rows
     .filter((row) => String(row?.date || '').trim() || String(row?.code || '').trim() || Number(row?.shares) > 0 || Number(row?.price) > 0)
@@ -444,11 +515,6 @@ function CompactOcrStatusCard({ fileName, statusMeta, recognizedCount, needsManu
           <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">OCR 结果预览</div>
           {previewRows.length ? (
             <div className="mt-3 overflow-hidden rounded-xl border border-slate-100 bg-white">
-              <div className="grid grid-cols-[1.1fr,0.8fr,1fr] gap-3 border-b border-slate-100 bg-slate-50 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                <div>基金</div>
-                <div>类型</div>
-                <div className="text-right">份额</div>
-              </div>
               {previewRows.map((row) => (
                 <div key={row.id} className="border-b border-slate-100 last:border-b-0">
                   <div className="grid grid-cols-[1.1fr,0.8fr,1fr] gap-3 px-3 py-2.5 text-sm font-semibold text-slate-700">
@@ -479,6 +545,31 @@ function CompactOcrStatusCard({ fileName, statusMeta, recognizedCount, needsManu
         </div>
       </div>
     </Card>
+  );
+}
+
+function PendingResultCard({ issueSummary, onEdit }) {
+  return (
+    <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-5 sm:p-6">
+      <div className="flex flex-col gap-4">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 rounded-full bg-white p-2 text-amber-600 shadow-sm shadow-amber-100">
+            <AlertTriangle className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-700/70">Pending Confirmation</div>
+            <div className="mt-2 text-lg font-bold text-amber-900">请先确认识别明细</div>
+            <div className="mt-2 text-sm leading-6 text-amber-900/75">
+              {issueSummary || '交易明细校验通过后，系统才会生成切换收益结果。'}
+            </div>
+          </div>
+        </div>
+
+        <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-4 py-2.5 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-100" type="button" onClick={onEdit}>
+          修改识别明细
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -518,6 +609,7 @@ export function FundSwitchExperience({ links, inPagesDir }) {
   const [ocrState, setOcrState] = useState(() => createOcrState());
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [showCalculationDetails, setShowCalculationDetails] = useState(false);
+  const [confirmError, setConfirmError] = useState('');
   const [priceState, setPriceState] = useState(() => ({ status: 'idle', entries: [], error: '' }));
   const fileInputRef = useRef(null);
 
@@ -544,9 +636,11 @@ export function FundSwitchExperience({ links, inPagesDir }) {
     ? `已同步 ${recognizedCount} 条记录，可继续确认收益或修改明细。`
     : ocrState.message;
   const ocrPreview = useMemo(() => buildOcrPreviewRows(summary.rows), [summary.rows]);
+  const validationIssues = useMemo(() => buildRowValidationIssues(summary.rows), [summary.rows]);
+  const validationIssueSummary = useMemo(() => summarizeValidationIssues(validationIssues), [validationIssues]);
   const statusMeta = getStatusMeta(effectiveOcrStatus);
   const advantageMeta = getAdvantageTone(summary.switchAdvantage);
-  const needsManualReview = ocrState.status === 'warning' || summary.rows.some((row) => Boolean(getFundCodeError(row.code)));
+  const needsManualReview = ocrState.status === 'warning' || validationIssues.length > 0 || !state.resultConfirmed;
 
   useEffect(() => {
     persistFundSwitchState({ ...state, comparison: summary.comparison }, summary);
@@ -576,6 +670,7 @@ export function FundSwitchExperience({ links, inPagesDir }) {
   }, [inPagesDir]);
 
   function updateComparisonScalar(key, value) {
+    setConfirmError('');
     setState((current) => ({
       ...current,
       comparison: {
@@ -586,6 +681,7 @@ export function FundSwitchExperience({ links, inPagesDir }) {
   }
 
   function updateSinglePosition(kind, field, value) {
+    setConfirmError('');
     setState((current) => {
       const isSource = kind === 'source';
       const codeKey = isSource ? 'sourceCode' : 'targetCode';
@@ -607,6 +703,7 @@ export function FundSwitchExperience({ links, inPagesDir }) {
   }
 
   function updatePriceOverride(kind, code, value) {
+    setConfirmError('');
     setState((current) => {
       const normalizedCode = String(code || '').trim();
       const nextValue = Number(value) || 0;
@@ -641,6 +738,7 @@ export function FundSwitchExperience({ links, inPagesDir }) {
   }
 
   function updateStrategy(strategy) {
+    setConfirmError('');
     setState((current) => ({
       ...current,
       comparison: deriveFundSwitchComparison(current.rows, { ...current.comparison, strategy }, strategy)
@@ -648,10 +746,12 @@ export function FundSwitchExperience({ links, inPagesDir }) {
   }
 
   function updateFeePerTrade(value) {
+    setConfirmError('');
     setState((current) => ({ ...current, feePerTrade: Number(value) || 0 }));
   }
 
   function updateRow(index, key, value) {
+    setConfirmError('');
     setState((current) => {
       const nextRows = [...current.rows];
       const currentRow = nextRows[index] || createEmptyFundSwitchRow();
@@ -672,26 +772,33 @@ export function FundSwitchExperience({ links, inPagesDir }) {
         }
       }
 
+      const activePrice = nextRow.type === '卖出' ? Number(nextRow.sellPrice) || 0 : Number(nextRow.buyPrice) || 0;
+      const activeShares = Number(nextRow.shares) || 0;
+      nextRow.price = activePrice;
+      nextRow.amount = activePrice > 0 && activeShares > 0 ? roundToCurrency(activePrice * activeShares) : 0;
       nextRows[index] = nextRow;
-      return { ...current, rows: nextRows, recognizedRecords: nextRows.length };
+      return { ...current, rows: nextRows, recognizedRecords: nextRows.length, resultConfirmed: false };
     });
   }
 
   function removeRow(index) {
+    setConfirmError('');
     setState((current) => {
       const nextRows = current.rows.filter((_, rowIndex) => rowIndex !== index);
       const safeRows = nextRows.length ? nextRows : [createEmptyFundSwitchRow()];
-      return { ...current, rows: safeRows, recognizedRecords: safeRows.length };
+      return { ...current, rows: safeRows, recognizedRecords: safeRows.length, resultConfirmed: false };
     });
   }
 
   function addRow() {
+    setConfirmError('');
     setState((current) => {
       const nextRows = [...current.rows, createEmptyFundSwitchRow()];
       return {
         ...current,
         rows: nextRows,
-        recognizedRecords: nextRows.length
+        recognizedRecords: nextRows.length,
+        resultConfirmed: false
       };
     });
   }
@@ -709,12 +816,14 @@ export function FundSwitchExperience({ links, inPagesDir }) {
         ...current,
         fileName: file.name,
         recognizedRecords: result.recordCount || parsedRows.length,
+        resultConfirmed: false,
         rows: parsedRows,
         comparison: {
           ...current.comparison,
           ...result.comparison
         }
       }));
+      setConfirmError('');
       setIsEditingDetails(false);
       setShowCalculationDetails(false);
 
@@ -780,10 +889,19 @@ export function FundSwitchExperience({ links, inPagesDir }) {
   }
 
   function handleConfirmDataAndYield() {
+    if (validationIssues.length) {
+      setConfirmError(summarizeValidationIssues(validationIssues));
+      setIsEditingDetails(true);
+      setShowCalculationDetails(false);
+      return;
+    }
+
+    setConfirmError('');
     setState((current) => ({
       ...current,
       comparison: deriveFundSwitchComparison(current.rows, current.comparison),
-      recognizedRecords: current.rows.length
+      recognizedRecords: current.rows.length,
+      resultConfirmed: true
     }));
     setIsEditingDetails(false);
     setShowCalculationDetails(false);
@@ -863,7 +981,7 @@ export function FundSwitchExperience({ links, inPagesDir }) {
         ) : isEditingDetails ? (
           <>
             <EditingSummaryStrip
-              value={formatSignedCurrency(summary.switchAdvantage, '¥ ')}
+              value={state.resultConfirmed ? formatSignedCurrency(summary.switchAdvantage, '¥ ') : '待生成'}
               strategy={summary.strategy}
               recognizedCount={recognizedCount}
               onExit={closeDetailEditor}
@@ -886,6 +1004,12 @@ export function FundSwitchExperience({ links, inPagesDir }) {
                   </button>
                 </div>
               </div>
+
+              {confirmError ? (
+                <div className="border-b border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600 sm:px-6">
+                  {confirmError}
+                </div>
+              ) : null}
 
               <div className="space-y-3 p-4 md:hidden">
                 {summary.rows.map((row, index) => (
@@ -991,42 +1115,48 @@ export function FundSwitchExperience({ links, inPagesDir }) {
                 <SectionHeading eyebrow="Conclusion" title="当前切换判断" />
 
                 <div className="mt-5 space-y-3 sm:space-y-4">
-                  <SummaryValueCard
-                    value={formatSignedCurrency(summary.switchAdvantage, '')}
-                    advantageMeta={advantageMeta}
-                    strategy={summary.strategy}
-                    onStrategyChange={updateStrategy}
-                  />
+                  {state.resultConfirmed ? (
+                    <>
+                      <SummaryValueCard
+                        value={formatSignedCurrency(summary.switchAdvantage, '')}
+                        advantageMeta={advantageMeta}
+                        strategy={summary.strategy}
+                        onStrategyChange={updateStrategy}
+                      />
 
-                  <div className="grid gap-3 lg:grid-cols-2">
-                    <PositionValueCard
-                      title="不切换现值"
-                      value={formatCurrency(summary.stayValue, '¥ ')}
-                      positions={summary.sourcePositions}
-                      priceSnapshotByCode={priceSnapshotByCode}
-                      emptyText="尚未回放出来源持仓，请先确认交易数据。"
-                    />
-                    <PositionValueCard
-                      title="切换后现值"
-                      value={formatCurrency(summary.switchedValue, '¥ ')}
-                      positions={summary.targetPositions}
-                      priceSnapshotByCode={priceSnapshotByCode}
-                      emptyText="尚未回放出目标持仓，请先确认交易数据。"
-                    />
-                  </div>
+                      <div className="grid gap-3 lg:grid-cols-2">
+                        <PositionValueCard
+                          title="不切换现值"
+                          value={formatCurrency(summary.stayValue, '¥ ')}
+                          positions={summary.sourcePositions}
+                          priceSnapshotByCode={priceSnapshotByCode}
+                          emptyText="尚未回放出来源持仓，请先确认交易数据。"
+                        />
+                        <PositionValueCard
+                          title="切换后现值"
+                          value={formatCurrency(summary.switchedValue, '¥ ')}
+                          positions={summary.targetPositions}
+                          priceSnapshotByCode={priceSnapshotByCode}
+                          emptyText="尚未回放出目标持仓，请先确认交易数据。"
+                        />
+                      </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <CompactMetricCard
-                      title="现持仓浮盈"
-                      value={formatSignedCurrency(summary.switchedPositionProfit, '¥ ')}
-                      note="现值 - 成本 - 手续费"
-                      tone={summary.switchedPositionProfit >= 0 ? 'positive' : 'negative'}
-                    />
-                    <CompactMetricCard title="预估处理金额" value={formatCurrency(summary.processedAmount, '¥ ')} note="已识别记录累计成交额" />
-                  </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <CompactMetricCard
+                          title="现持仓浮盈"
+                          value={formatSignedCurrency(summary.switchedPositionProfit, '¥ ')}
+                          note="现值 - 成本 - 手续费"
+                          tone={summary.switchedPositionProfit >= 0 ? 'positive' : 'negative'}
+                        />
+                        <CompactMetricCard title="预估处理金额" value={formatCurrency(summary.processedAmount, '¥ ')} note="已识别记录累计成交额" />
+                      </div>
+                    </>
+                  ) : (
+                    <PendingResultCard issueSummary={confirmError || validationIssueSummary} onEdit={openDetailEditor} />
+                  )}
                 </div>
 
-                {summary.missingPriceCodes.length ? (
+                {state.resultConfirmed && summary.missingPriceCodes.length ? (
                   <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
                     以下基金暂未匹配到现价，请在下方参数面板中手动补入：{summary.missingPriceCodes.join('、')}
                   </div>
@@ -1034,77 +1164,83 @@ export function FundSwitchExperience({ links, inPagesDir }) {
               </Card>
             </div>
 
-            <Card className="overflow-hidden p-0">
-              <div className="flex cursor-pointer flex-col gap-4 border-b border-slate-200 bg-slate-50 p-4 transition-colors hover:bg-slate-100 sm:flex-row sm:items-center sm:justify-between sm:p-6" onClick={() => setShowCalculationDetails((current) => !current)}>
-                <SectionHeading eyebrow="Parameters" title="计算详细参数预设" description="默认保持收起，只有在需要补现价或校准参数时再展开修改。" />
-                <button className="flex items-center gap-2 self-start text-sm font-semibold text-slate-500 transition-colors hover:text-slate-800 sm:self-auto" type="button">
-                  {showCalculationDetails ? '收起面板' : '展开修改'}
-                  {showCalculationDetails ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-                </button>
-              </div>
+            {state.resultConfirmed ? (
+              <Card className="overflow-hidden p-0">
+                <div className="flex cursor-pointer flex-col gap-4 border-b border-slate-200 bg-slate-50 p-4 transition-colors hover:bg-slate-100 sm:flex-row sm:items-center sm:justify-between sm:p-6" onClick={() => setShowCalculationDetails((current) => !current)}>
+                  <SectionHeading eyebrow="Parameters" title="计算详细参数预设" description="默认保持收起，只有在需要补现价或校准参数时再展开修改。" />
+                  <button className="flex items-center gap-2 self-start text-sm font-semibold text-slate-500 transition-colors hover:text-slate-800 sm:self-auto" type="button">
+                    {showCalculationDetails ? '收起面板' : '展开修改'}
+                    {showCalculationDetails ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                  </button>
+                </div>
 
-              {showCalculationDetails ? (
-                <div className="space-y-6 bg-white p-4 sm:space-y-8 sm:p-6">
-                  <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">来源策略</div>
-                      <div className="mt-1 text-sm text-slate-600">切换 direct / trace 会重新按交易链路回放当前来源仓位。</div>
+                {showCalculationDetails ? (
+                  <div className="space-y-6 bg-white p-4 sm:space-y-8 sm:p-6">
+                    <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">来源策略</div>
+                        <div className="mt-1 text-sm text-slate-600">切换 direct / trace 会重新按交易链路回放当前来源仓位。</div>
+                      </div>
+                      <StrategyToggle strategy={summary.strategy} onChange={updateStrategy} />
                     </div>
-                    <StrategyToggle strategy={summary.strategy} onChange={updateStrategy} />
-                  </div>
 
-                  <div className="grid gap-6 xl:grid-cols-2">
-                    <PositionEditorSection
-                      kind="source"
-                      positions={summary.sourcePositions}
-                      comparison={summary.comparison}
-                      priceSnapshotByCode={priceSnapshotByCode}
-                      onSingleFieldChange={updateSinglePosition}
-                      onPriceChange={updatePriceOverride}
-                    />
+                    <div className="grid gap-6 xl:grid-cols-2">
+                      <PositionEditorSection
+                        kind="source"
+                        positions={summary.sourcePositions}
+                        comparison={summary.comparison}
+                        priceSnapshotByCode={priceSnapshotByCode}
+                        onSingleFieldChange={updateSinglePosition}
+                        onPriceChange={updatePriceOverride}
+                      />
 
-                    <PositionEditorSection
-                      kind="target"
-                      positions={summary.targetPositions}
-                      comparison={summary.comparison}
-                      priceSnapshotByCode={priceSnapshotByCode}
-                      onSingleFieldChange={updateSinglePosition}
-                      onPriceChange={updatePriceOverride}
-                    />
-                  </div>
+                      <PositionEditorSection
+                        kind="target"
+                        positions={summary.targetPositions}
+                        comparison={summary.comparison}
+                        priceSnapshotByCode={priceSnapshotByCode}
+                        onSingleFieldChange={updateSinglePosition}
+                        onPriceChange={updatePriceOverride}
+                      />
+                    </div>
 
-                  <div className="border-t border-slate-100 pt-6">
-                    <SectionHeading eyebrow="Cost Adjustments" title="切换成本调整项" />
-                    <div className="mt-5 grid gap-4 xl:grid-cols-3 xl:gap-6">
-                      <label className="block rounded-xl border border-slate-100 bg-slate-50 p-4">
-                        <span className="block text-sm font-bold text-slate-700">额外补入现金 (元)</span>
-                        <span className="mt-1 block text-[10px] leading-relaxed text-slate-500">direct 模式只累计当前目标仓位的直接补现金；trace 会继续把中间链路补现金穿透累加。</span>
-                        <input className="mt-3 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 font-semibold text-slate-800 outline-none transition-all focus:border-indigo-400" type="number" step="0.01" value={summary.comparison.extraCash} onChange={(event) => updateComparisonScalar('extraCash', event.target.value)} />
-                      </label>
+                    <div className="border-t border-slate-100 pt-6">
+                      <SectionHeading eyebrow="Cost Adjustments" title="切换成本调整项" />
+                      <div className="mt-5 grid gap-4 xl:grid-cols-3 xl:gap-6">
+                        <label className="block rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <span className="block text-sm font-bold text-slate-700">额外补入现金 (元)</span>
+                          <span className="mt-1 block text-[10px] leading-relaxed text-slate-500">direct 模式只累计当前目标仓位的直接补现金；trace 会继续把中间链路补现金穿透累加。</span>
+                          <input className="mt-3 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 font-semibold text-slate-800 outline-none transition-all focus:border-indigo-400" type="number" step="0.01" value={summary.comparison.extraCash} onChange={(event) => updateComparisonScalar('extraCash', event.target.value)} />
+                        </label>
 
-                      <label className="block rounded-xl border border-slate-100 bg-slate-50 p-4">
-                        <span className="block text-sm font-bold text-slate-700">目标仓位原始成本 (元)</span>
-                        <span className="mt-1 block text-[10px] leading-relaxed text-slate-500">这里是当前剩余目标仓位的成本合计，默认由 lot 回放自动生成，必要时可以人工校准。</span>
-                        <input className="mt-3 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 font-semibold text-slate-800 outline-none transition-all focus:border-indigo-400" type="number" step="0.01" value={summary.comparison.switchCost} onChange={(event) => updateComparisonScalar('switchCost', event.target.value)} />
-                      </label>
+                        <label className="block rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <span className="block text-sm font-bold text-slate-700">目标仓位原始成本 (元)</span>
+                          <span className="mt-1 block text-[10px] leading-relaxed text-slate-500">这里是当前剩余目标仓位的成本合计，默认由 lot 回放自动生成，必要时可以人工校准。</span>
+                          <input className="mt-3 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 font-semibold text-slate-800 outline-none transition-all focus:border-indigo-400" type="number" step="0.01" value={summary.comparison.switchCost} onChange={(event) => updateComparisonScalar('switchCost', event.target.value)} />
+                        </label>
 
-                      <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                        <span className="block text-sm font-bold text-slate-700">预估交易手续费 (元)</span>
-                        <span className="mt-1 block text-[10px] leading-relaxed text-slate-500">默认同步为当前明细记录行数，可继续手动校准。</span>
-                        <div className="mt-3 flex items-center gap-2">
-                          <input className="h-11 w-20 rounded-lg border border-slate-200 bg-white px-2 text-center font-semibold text-slate-800 outline-none transition-all focus:border-indigo-400" type="number" step="0.01" placeholder="单笔" value={summary.feePerTrade} onChange={(event) => updateFeePerTrade(event.target.value)} />
-                          <span className="text-xs font-bold text-slate-400">×</span>
-                          <div className="relative flex-1">
-                            <input className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 font-semibold text-slate-800 outline-none transition-all focus:border-indigo-400" type="number" step="1" value={summary.comparison.feeTradeCount} onChange={(event) => updateComparisonScalar('feeTradeCount', event.target.value)} />
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">笔</span>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <span className="block text-sm font-bold text-slate-700">预估交易手续费 (元)</span>
+                          <span className="mt-1 block text-[10px] leading-relaxed text-slate-500">默认同步为当前明细记录行数，可继续手动校准。</span>
+                          <div className="mt-3 flex items-center gap-2">
+                            <input className="h-11 w-20 rounded-lg border border-slate-200 bg-white px-2 text-center font-semibold text-slate-800 outline-none transition-all focus:border-indigo-400" type="number" step="0.01" placeholder="单笔" value={summary.feePerTrade} onChange={(event) => updateFeePerTrade(event.target.value)} />
+                            <span className="text-xs font-bold text-slate-400">×</span>
+                            <div className="relative flex-1">
+                              <input className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 font-semibold text-slate-800 outline-none transition-all focus:border-indigo-400" type="number" step="1" value={summary.comparison.feeTradeCount} onChange={(event) => updateComparisonScalar('feeTradeCount', event.target.value)} />
+                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">笔</span>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ) : null}
-            </Card>
+                ) : null}
+              </Card>
+            ) : (
+              <Card className="p-4 sm:p-6">
+                <SectionHeading eyebrow="Parameters" title="计算详细参数预设" description="请先确认 OCR 识别明细，校验通过后再生成和调整收益参数。" />
+              </Card>
+            )}
           </>
         )}
       </div>
@@ -1124,8 +1260,8 @@ export function FundSwitchExperience({ links, inPagesDir }) {
                 </div>
                 <div className="rounded-2xl bg-slate-100 px-3 py-2.5">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">额外收益</div>
-                  <div className={cx('mt-1 text-sm font-extrabold', summary.switchAdvantage >= 0 ? 'text-emerald-600' : 'text-red-600')}>
-                    {formatSignedCurrency(summary.switchAdvantage, '¥ ')}
+                  <div className={cx('mt-1 text-sm font-extrabold', state.resultConfirmed ? (summary.switchAdvantage >= 0 ? 'text-emerald-600' : 'text-red-600') : 'text-slate-500')}>
+                    {state.resultConfirmed ? formatSignedCurrency(summary.switchAdvantage, '¥ ') : '待生成'}
                   </div>
                 </div>
               </div>
@@ -1144,8 +1280,8 @@ export function FundSwitchExperience({ links, inPagesDir }) {
                   <div className="h-8 w-px bg-slate-200" />
                   <div>
                     <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">当前额外收益</div>
-                    <div className={cx('mt-1 text-sm font-extrabold', summary.switchAdvantage >= 0 ? 'text-emerald-600' : 'text-red-600')}>
-                      {formatSignedCurrency(summary.switchAdvantage, '¥ ')}
+                    <div className={cx('mt-1 text-sm font-extrabold', state.resultConfirmed ? (summary.switchAdvantage >= 0 ? 'text-emerald-600' : 'text-red-600') : 'text-slate-500')}>
+                      {state.resultConfirmed ? formatSignedCurrency(summary.switchAdvantage, '¥ ') : '待生成'}
                     </div>
                   </div>
                 </div>
@@ -1163,7 +1299,7 @@ export function FundSwitchExperience({ links, inPagesDir }) {
                 ) : (
                   <div className="grid w-full gap-3 sm:flex sm:w-auto sm:items-center">
                     <button className={cx(primaryButtonClass, 'w-full sm:flex-none')} type="button" onClick={handleConfirmDataAndYield}>
-                      确认数据与收益
+                      {state.resultConfirmed ? '确认数据与收益' : '校验并生成结果'}
                       <ArrowRight className="h-4 w-4" />
                     </button>
                   </div>

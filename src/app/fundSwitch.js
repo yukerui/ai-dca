@@ -50,6 +50,7 @@ function createBlankRow(id = `switch-${Date.now()}`) {
 export const defaultFundSwitchState = {
   fileName: '',
   recognizedRecords: 0,
+  resultConfirmed: false,
   feePerTrade: 0,
   comparison: createBlankComparison(),
   rows: [createBlankRow('switch-empty-1')]
@@ -137,6 +138,20 @@ function isLegacySeededSample(saved) {
     && rows[3]?.code === '161725';
 }
 
+function inferSavedResultConfirmed(saved) {
+  if (typeof saved?.resultConfirmed === 'boolean') {
+    return saved.resultConfirmed;
+  }
+
+  const comparison = saved?.comparison || {};
+  return Boolean(
+    comparison.sourceCode
+      || comparison.targetCode
+      || (Array.isArray(comparison.sourcePositions) && comparison.sourcePositions.length)
+      || (Array.isArray(comparison.targetPositions) && comparison.targetPositions.length)
+  );
+}
+
 export function readFundSwitchState() {
   if (typeof window === 'undefined') {
     return defaultFundSwitchState;
@@ -153,6 +168,7 @@ export function readFundSwitchState() {
     return {
       fileName: saved.fileName || '',
       recognizedRecords: Math.max(Number(saved.recognizedRecords) || validSavedRows.length || 0, 0),
+      resultConfirmed: inferSavedResultConfirmed(saved),
       feePerTrade: round(toPositiveNumber(saved.feePerTrade), 2),
       comparison: sanitizeFundSwitchComparison(saved.comparison || createBlankComparison()),
       rows: savedRows.length ? savedRows : [createEmptyFundSwitchRow()]
@@ -171,6 +187,7 @@ export function persistFundSwitchState(state, computed = buildFundSwitchSummary(
     source: 'react-fund-switch',
     fileName: state.fileName || '',
     recognizedRecords: Math.max(Number(state.recognizedRecords) || computed.validRecordCount, 0),
+    resultConfirmed: Boolean(state.resultConfirmed),
     feePerTrade: round(computed.feePerTrade, 2),
     processedAmount: round(computed.processedAmount, 2),
     sellAmount: round(computed.sellAmount, 2),
