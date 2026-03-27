@@ -9,9 +9,6 @@ import {
   sanitizeFundSwitchRows
 } from './fundSwitchCore.js';
 
-const FUND_SWITCH_KEY = 'aiDcaFundSwitchState';
-const LEGACY_SAMPLE_FILE_NAME = 'Screenshot_20231024_09.png';
-
 export { FUND_SWITCH_STRATEGIES };
 
 function createBlankComparison() {
@@ -134,59 +131,18 @@ export function buildFundSwitchSummary(state, { getCurrentPrice } = {}) {
   };
 }
 
-function isLegacySeededSample(saved) {
-  if (!saved || typeof saved !== 'object') {
-    return false;
-  }
-
-  const rows = Array.isArray(saved.rows) ? saved.rows : [];
-  return saved.fileName === LEGACY_SAMPLE_FILE_NAME
-    && Math.max(Number(saved.recognizedRecords) || 0, 0) === 4
-    && rows.length === 4
-    && rows[0]?.code === '000651'
-    && rows[1]?.code === '001230'
-    && rows[2]?.code === '510300'
-    && rows[3]?.code === '161725';
-}
-
-function inferSavedResultConfirmed(saved) {
-  if (typeof saved?.resultConfirmed === 'boolean') {
-    return saved.resultConfirmed;
-  }
-
-  const comparison = saved?.comparison || {};
-  return Boolean(
-    comparison.sourceCode
-      || comparison.targetCode
-      || (Array.isArray(comparison.sourcePositions) && comparison.sourcePositions.length)
-      || (Array.isArray(comparison.targetPositions) && comparison.targetPositions.length)
-  );
-}
-
 export function readFundSwitchState() {
   if (typeof window === 'undefined') {
-    return defaultFundSwitchState;
+    return createDefaultFundSwitchState();
   }
 
   try {
-    const saved = JSON.parse(window.localStorage.getItem(FUND_SWITCH_KEY) || 'null');
-    if (!saved || isLegacySeededSample(saved)) {
-      return defaultFundSwitchState;
-    }
-
-    const savedRows = sanitizeFundSwitchRows(Array.isArray(saved.rows) && saved.rows.length ? saved.rows : defaultFundSwitchState.rows);
-    const validSavedRows = sanitizeFundSwitchRows(savedRows, { filterInvalid: true });
-    return {
-      fileName: saved.fileName || '',
-      recognizedRecords: Math.max(Number(saved.recognizedRecords) || validSavedRows.length || 0, 0),
-      resultConfirmed: inferSavedResultConfirmed(saved),
-      feePerTrade: round(toPositiveNumber(saved.feePerTrade), 2),
-      comparison: sanitizeFundSwitchComparison(saved.comparison || createBlankComparison()),
-      rows: savedRows.length ? savedRows : [createEmptyFundSwitchRow()]
-    };
+    window.localStorage.removeItem('aiDcaFundSwitchState');
   } catch (_error) {
-    return defaultFundSwitchState;
+    return createDefaultFundSwitchState();
   }
+
+  return createDefaultFundSwitchState();
 }
 
 export function persistFundSwitchState(state, computed = buildFundSwitchSummary(state)) {
@@ -194,54 +150,9 @@ export function persistFundSwitchState(state, computed = buildFundSwitchSummary(
     return;
   }
 
-  const payload = {
-    source: 'react-fund-switch',
-    fileName: state.fileName || '',
-    recognizedRecords: Math.max(Number(state.recognizedRecords) || computed.validRecordCount, 0),
-    resultConfirmed: Boolean(state.resultConfirmed),
-    feePerTrade: round(computed.feePerTrade, 2),
-    processedAmount: round(computed.processedAmount, 2),
-    sellAmount: round(computed.sellAmount, 2),
-    buyAmount: round(computed.buyAmount, 2),
-    estimatedYield: round(computed.estimatedYield, 2),
-    feeTotal: round(computed.feeTotal, 2),
-    stayValue: round(computed.stayValue, 2),
-    switchedValue: round(computed.switchedValue, 2),
-    switchedPositionProfit: round(computed.switchedPositionProfit, 2),
-    switchAdvantage: round(computed.switchAdvantage, 2),
-    comparison: {
-      ...computed.comparison,
-      sourcePositions: computed.comparison.sourcePositions.map((position) => ({
-        code: position.code,
-        shares: round(position.shares, 2)
-      })),
-      targetPositions: computed.comparison.targetPositions.map((position) => ({
-        code: position.code,
-        shares: round(position.shares, 2)
-      })),
-      priceOverrides: Object.fromEntries(
-        Object.entries(computed.comparison.priceOverrides || {})
-          .map(([code, price]) => [code, round(price, 4)])
-          .filter(([, price]) => price > 0)
-      ),
-      sourceSellShares: round(computed.comparison.sourceSellShares, 2),
-      sourceCurrentPrice: round(computed.comparison.sourceCurrentPrice, 4),
-      targetBuyShares: round(computed.comparison.targetBuyShares, 2),
-      targetCurrentPrice: round(computed.comparison.targetCurrentPrice, 4),
-      switchCost: round(computed.comparison.switchCost, 2),
-      extraCash: round(computed.comparison.extraCash, 2),
-      feeTradeCount: Math.max(Number(computed.comparison.feeTradeCount) || 0, 0)
-    },
-    rows: computed.rows.map((row) => ({
-      ...row,
-      buyPrice: round(row.buyPrice, 4),
-      sellPrice: round(row.sellPrice, 4),
-      price: round(row.price, 4),
-      shares: round(row.shares, 2),
-      amount: round(row.amount, 2)
-    })),
-    updatedAt: new Date().toISOString()
-  };
-
-  window.localStorage.setItem(FUND_SWITCH_KEY, JSON.stringify(payload));
+  try {
+    window.localStorage.removeItem('aiDcaFundSwitchState');
+  } catch (_error) {
+    // This page intentionally does not persist user-uploaded data in the browser.
+  }
 }
