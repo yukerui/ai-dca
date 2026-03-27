@@ -1,21 +1,122 @@
-import { ArrowRight, LayoutGrid, LineChart, Plus, Search, Shield, TrendingUp, Wallet } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowRight, LayoutGrid, LineChart, Plus, Shield, Trash2, TrendingUp, Wallet } from 'lucide-react';
 import { buildStages, formatCurrency, formatPercent, readAccumulationState } from '../app/accumulation.js';
 import { buildDcaProjection, readDcaState } from '../app/dca.js';
+import { formatPriceAsOf, loadLatestNasdaqPrices, loadNasdaqMinuteSnapshot } from '../app/nasdaqPrices.js';
 import { buildPlan, readPlanState } from '../app/plan.js';
-import { Card, PageHero, PageShell, Pill, SectionHeading, StatCard, cx, primaryButtonClass, secondaryButtonClass } from '../components/experience-ui.jsx';
+import { Card, PageHero, PageShell, Pill, SectionHeading, SelectField, StatCard, cx, primaryButtonClass, secondaryButtonClass, subtleButtonClass } from '../components/experience-ui.jsx';
 
-const WATCHLIST = [
-  { symbol: 'QQQ', price: 502.44, note: '纳斯达克 100', active: true },
-  { symbol: 'VOO', price: 512.1, note: 'S&P 500' },
-  { symbol: 'SPY', price: 560.22, note: '核心指数' }
-];
+const DEFAULT_WATCHLIST_CODES = ['513100', '159501', '159660'];
+const CHART_POINT_LIMIT = 28;
 
 const HISTORY_PLANS = [
   { name: '科技股累积', note: '平均成本: $548.05', active: true },
   { name: '股息增长', note: '平均成本: $42.10' }
 ];
 
-export function HomeExperience({ links }) {
+function formatFundPrice(value) {
+  return formatCurrency(value, '¥', 3);
+}
+
+function formatCompactNumber(value) {
+  return new Intl.NumberFormat('zh-CN', {
+    notation: 'compact',
+    maximumFractionDigits: 1
+  }).format(Number(value) || 0);
+}
+
+function sampleBars(bars = [], limit = CHART_POINT_LIMIT) {
+  if (!Array.isArray(bars) || bars.length <= limit) {
+    return Array.isArray(bars) ? bars : [];
+  }
+
+  const step = (bars.length - 1) / Math.max(limit - 1, 1);
+  return Array.from({ length: limit }, (_, index) => bars[Math.min(bars.length - 1, Math.round(index * step))]);
+}
+
+function scaleChartY(value, minValue, maxValue) {
+  if (!Number.isFinite(value) || !Number.isFinite(minValue) || !Number.isFinite(maxValue) || maxValue <= minValue) {
+    return 50;
+  }
+
+  const ratio = (value - minValue) / (maxValue - minValue);
+  return 84 - ratio * 68;
+}
+
+function buildChartGeometry(bars = []) {
+  if (!bars.length) {
+    return { candles: [], volumeBars: [], closePoints: '' };
+  }
+
+  const numericPrices = bars.flatMap((bar) => [bar.open, bar.close, bar.high, bar.low].map((value) => Number(value))).filter(Number.isFinite);
+  const numericVolumes = bars.map((bar) => Number(bar.volume) || 0);
+  const minPrice = Math.min(...numericPrices);
+  const maxPrice = Math.max(...numericPrices);
+  const maxVolume = Math.max(...numericVolumes, 1);
+  const gap = bars.length > 1 ? 92 / (bars.length - 1) : 0;
+  const candleWidth = Math.max(Math.min(gap * 0.52, 2.8), 1.3);
+
+  const candles = bars.map((bar, index) => {
+    const x = 4 + gap * index;
+    const open = Number(bar.open) || 0;
+    const close = Number(bar.close) || open;
+    const high = Number(bar.high) || Math.max(open, close);
+    const low = Number(bar.low) || Math.min(open, close);
+    const openY = scaleChartY(open, minPrice, maxPrice);
+    const closeY = scaleChartY(close, minPrice, maxPrice);
+    const highY = scaleChartY(high, minPrice, maxPrice);
+    const lowY = scaleChartY(low, minPrice, maxPrice);
+    const bodyY = Math.min(openY, closeY);
+    const bodyHeight = Math.max(Math.abs(closeY - openY), 1.3);
+
+    return {
+      id: `${bar.datetime || index}`,
+      x,
+      wickX: x,
+      wickTop: highY,
+      wickBottom: lowY,
+      bodyX: x - candleWidth / 2,
+      bodyY,
+      bodyHeight,
+      rising: close >= open
+    };
+  });
+
+  const volumeBars = bars.map((bar, index) => {
+    const x = 4 + gap * index;
+    const height = Math.max((Number(bar.volume) || 0) / maxVolume * 18, 1.2);
+    return {
+      id: `volume-${bar.datetime || index}`,
+      x: x - candleWidth / 2,
+      y: 96 - height,
+      width: candleWidth,
+      height,
+      rising: (Number(bar.close) || 0) >= (Number(bar.open) || 0)
+    };
+  });
+
+  const closePoints = bars
+    .map((bar, index) => {
+      const x = 4 + gap * index;
+      const y = scaleChartY(Number(bar.close) || 0, minPrice, maxPrice);
+      return `${x},${y}`;
+    })
+    .join(' ');
+
+  return { candles, volumeBars, closePoints };
+}
+
+function buildDefaultCodes(entries = []) {
+  const availableCodes = new Set(entries.map((entry) => entry.code));
+  const preferred = DEFAULT_WATCHLIST_CODES.filter((code) => availableCodes.has(code));
+  if (preferred.length) {
+    return preferred;
+  }
+
+  return entries.slice(0, 3).map((entry) => entry.code);
+}
+
+export function HomeExperience({ links, inPagesDir = false }) {
   const accumulationState = readAccumulationState();
   const accumulation = buildStages(accumulationState);
   const planState = readPlanState();
@@ -24,7 +125,181 @@ export function HomeExperience({ links }) {
   const dca = buildDcaProjection(dcaState);
   const nextBuyPrice = accumulation.stages[1]?.price ?? accumulationState.basePrice;
   const reserveRatio = planState.totalBudget > 0 ? plan.reserveCapital / planState.totalBudget * 100 : 0;
-  const highlightedStages = accumulation.stages.slice(0, 3);
+
+  const [marketEntries, setMarketEntries] = useState([]);
+  const [marketError, setMarketError] = useState('');
+  const [watchlistCodes, setWatchlistCodes] = useState([]);
+  const [selectedCode, setSelectedCode] = useState('');
+  const [pendingCode, setPendingCode] = useState('');
+  const [pulseData, setPulseData] = useState(null);
+  const [pulseError, setPulseError] = useState('');
+  const [isLoadingPulse, setIsLoadingPulse] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    loadLatestNasdaqPrices({ inPagesDir })
+      .then((entries) => {
+        if (cancelled) {
+          return;
+        }
+
+        setMarketEntries(entries);
+        setMarketError('');
+        setWatchlistCodes((current) => (current.length ? current.filter((code) => entries.some((entry) => entry.code === code)) : buildDefaultCodes(entries)));
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        setMarketEntries([]);
+        setMarketError(error instanceof Error ? error.message : '现价数据加载失败');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [inPagesDir]);
+
+  const marketByCode = useMemo(() => new Map(marketEntries.map((entry) => [entry.code, entry])), [marketEntries]);
+
+  const visibleWatchlistCodes = useMemo(() => {
+    return watchlistCodes.filter((code) => marketByCode.has(code));
+  }, [marketByCode, watchlistCodes]);
+
+  const watchlistItems = useMemo(
+    () => visibleWatchlistCodes.map((code) => marketByCode.get(code)).filter(Boolean),
+    [marketByCode, visibleWatchlistCodes]
+  );
+
+  const addableEntries = useMemo(
+    () => marketEntries.filter((entry) => !visibleWatchlistCodes.includes(entry.code)),
+    [marketEntries, visibleWatchlistCodes]
+  );
+
+  useEffect(() => {
+    if (!watchlistItems.length) {
+      if (selectedCode) {
+        setSelectedCode('');
+      }
+      return;
+    }
+
+    if (!watchlistItems.some((item) => item.code === selectedCode)) {
+      setSelectedCode(watchlistItems[0].code);
+    }
+  }, [selectedCode, watchlistItems]);
+
+  useEffect(() => {
+    if (!addableEntries.length) {
+      if (pendingCode) {
+        setPendingCode('');
+      }
+      return;
+    }
+
+    if (!addableEntries.some((entry) => entry.code === pendingCode)) {
+      setPendingCode(addableEntries[0].code);
+    }
+  }, [addableEntries, pendingCode]);
+
+  const selectedFund = useMemo(() => marketByCode.get(selectedCode) || null, [marketByCode, selectedCode]);
+
+  useEffect(() => {
+    if (!selectedFund?.output_path) {
+      setPulseData(null);
+      setPulseError('');
+      setIsLoadingPulse(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    setIsLoadingPulse(true);
+    loadNasdaqMinuteSnapshot(selectedFund, { inPagesDir })
+      .then((payload) => {
+        if (cancelled) {
+          return;
+        }
+
+        setPulseData(payload);
+        setPulseError('');
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        setPulseData(null);
+        setPulseError(error instanceof Error ? error.message : '分钟线数据加载失败');
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingPulse(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [inPagesDir, selectedFund]);
+
+  const pricePulse = useMemo(() => {
+    const rawBars = Array.isArray(pulseData?.bars) ? pulseData.bars : [];
+    if (!selectedFund || !rawBars.length) {
+      return null;
+    }
+
+    const bars = rawBars.filter((bar) => Number.isFinite(Number(bar.close)));
+    if (!bars.length) {
+      return null;
+    }
+
+    const firstBar = bars[0];
+    const lastBar = bars[bars.length - 1];
+    const latestPrice = Number(selectedFund.current_price) || Number(lastBar.close) || 0;
+    const openPrice = Number(firstBar.open) || Number(firstBar.close) || latestPrice;
+    const highPrice = Math.max(...bars.map((bar) => Number(bar.high) || Number(bar.close) || 0), latestPrice);
+    const lowPrice = Math.min(...bars.map((bar) => Number(bar.low) || Number(bar.close) || latestPrice), latestPrice);
+    const avgPrice = Number(lastBar.avg_price) || latestPrice;
+    const totalAmount = bars.reduce((sum, bar) => sum + (Number(bar.amount) || 0), 0);
+    const totalVolume = bars.reduce((sum, bar) => sum + (Number(bar.volume) || 0), 0);
+    const changePct = openPrice > 0 ? (latestPrice - openPrice) / openPrice * 100 : 0;
+    const sampledBars = sampleBars(bars);
+    const chart = buildChartGeometry(sampledBars);
+
+    return {
+      latestPrice,
+      openPrice,
+      highPrice,
+      lowPrice,
+      avgPrice,
+      totalAmount,
+      totalVolume,
+      changePct,
+      asOf: formatPriceAsOf(selectedFund),
+      chart,
+      lastTimestamp: String(lastBar.datetime || '').trim().slice(11, 16)
+    };
+  }, [pulseData, selectedFund]);
+
+  function addWatchlistItem() {
+    if (!pendingCode || visibleWatchlistCodes.includes(pendingCode)) {
+      return;
+    }
+
+    setWatchlistCodes((current) => [...current, pendingCode]);
+    setSelectedCode(pendingCode);
+  }
+
+  function removeWatchlistItem(code) {
+    setWatchlistCodes((current) => current.filter((itemCode) => itemCode !== code));
+    if (selectedCode === code) {
+      const nextCode = visibleWatchlistCodes.find((itemCode) => itemCode !== code) || '';
+      setSelectedCode(nextCode);
+    }
+  }
 
   return (
     <PageShell>
@@ -50,6 +325,101 @@ export function HomeExperience({ links }) {
       />
 
       <div className="mx-auto max-w-6xl space-y-6 px-6 pt-8">
+        <Card>
+          <SectionHeading
+            eyebrow="Watchlist"
+            title="自选基金"
+            description="自选基金固定放在页面最上方，仅当前会话生效。刷新页面后会回到默认组合，不会缓存你手动增删的结果。"
+            action={
+              <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+                <div className="min-w-[220px]">
+                  <SelectField
+                    disabled={!addableEntries.length}
+                    options={addableEntries.map((entry) => ({
+                      label: `${entry.code} · ${entry.name}`,
+                      value: entry.code
+                    }))}
+                    value={pendingCode}
+                    onChange={(event) => setPendingCode(event.target.value)}
+                  />
+                </div>
+                <button
+                  className={primaryButtonClass}
+                  disabled={!pendingCode || !addableEntries.length}
+                  type="button"
+                  onClick={addWatchlistItem}
+                >
+                  <Plus className="h-4 w-4" />
+                  新增自选
+                </button>
+              </div>
+            }
+          />
+
+          {marketError ? (
+            <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              自选基金数据加载失败：{marketError}
+            </div>
+          ) : null}
+
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {watchlistItems.map((item) => {
+              const isActive = item.code === selectedCode;
+              return (
+                <div
+                  key={item.code}
+                  className={cx(
+                    'group relative rounded-[24px] border px-4 py-4 transition-all',
+                    isActive
+                      ? 'border-indigo-200 bg-indigo-50 shadow-sm shadow-indigo-100'
+                      : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'
+                  )}
+                >
+                  <button
+                    className="absolute inset-0 rounded-[24px]"
+                    type="button"
+                    aria-label={`切换到 ${item.code}`}
+                    onClick={() => setSelectedCode(item.code)}
+                  />
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-lg font-semibold text-slate-900">{item.code}</div>
+                      <div className="mt-1 line-clamp-2 text-sm leading-6 text-slate-500">{item.name}</div>
+                    </div>
+                    <button
+                      className="relative z-10 inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        removeWatchlistItem(item.code);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="mt-4 flex items-end justify-between gap-4">
+                    <div>
+                      <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">现价</div>
+                      <div className={cx('mt-1 text-xl font-bold', isActive ? 'text-indigo-700' : 'text-slate-900')}>
+                        {formatFundPrice(item.current_price)}
+                      </div>
+                    </div>
+                    <span className={cx('rounded-full px-3 py-1 text-xs font-semibold', isActive ? 'bg-white text-indigo-600' : 'bg-white text-slate-500')}>
+                      {isActive ? '当前观察' : '点击切换'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {!watchlistItems.length && !marketError ? (
+            <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+              当前没有可展示的自选基金，请先从右上角加入一个可用标的。
+            </div>
+          ) : null}
+        </Card>
+
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard accent="indigo" eyebrow="Portfolio Budget" value={formatCurrency(accumulation.investedCapital)} note="当前金字塔策略总预算" progress={Math.max(100 - reserveRatio, 0)} />
           <StatCard eyebrow="Reserve Cash" value={formatCurrency(plan.reserveCapital)} note={`${formatPercent(reserveRatio, 1)} 作为流动性缓冲`} />
@@ -61,77 +431,105 @@ export function HomeExperience({ links }) {
           <Card className="lg:col-span-3">
             <SectionHeading
               eyebrow="Price Pulse"
-              title="价格走势与买点位"
-              description="用一个轻量趋势面板观察基准价、触发价与执行节奏，不再依赖侧边栏或旧仪表盘骨架。"
-              action={
-                <div className="flex items-center gap-2 rounded-full bg-slate-100 p-1 text-xs font-semibold text-slate-500">
-                  <span className="rounded-full px-3 py-1">1D</span>
-                  <span className="rounded-full bg-white px-3 py-1 text-slate-900 shadow-sm">1W</span>
-                  <span className="rounded-full px-3 py-1">1M</span>
-                </div>
-              }
+              title="价格走势与基金脉冲"
+              description="卡片指标和图表都直接读取 data 下对应基金的分钟线与现价数据，不再使用写死示意图。"
+              action={selectedFund ? <Pill tone="indigo">{selectedFund.code}</Pill> : null}
             />
 
-            <div className="mt-6 rounded-[24px] border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-indigo-50 p-5">
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="rounded-2xl border border-slate-200 bg-white/90 p-4">
-                  <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">基准买点</div>
-                  <div className="mt-2 text-xl font-bold text-slate-900">{formatCurrency(accumulation.stages[0]?.price ?? accumulationState.basePrice)}</div>
-                  <div className="mt-1 text-sm text-slate-500">阶段 01 已执行完成</div>
-                </div>
-                <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
-                  <div className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-500">下一观察价</div>
-                  <div className="mt-2 text-xl font-bold text-indigo-700">{formatCurrency(nextBuyPrice)}</div>
-                  <div className="mt-1 text-sm text-indigo-600">阶段 02 即将触发</div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white/90 p-4">
-                  <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">定投节奏</div>
-                  <div className="mt-2 text-xl font-bold text-slate-900">{dcaState.frequency}</div>
-                  <div className="mt-1 text-sm text-slate-500">{dca.executionCount} 次执行窗口</div>
-                </div>
-              </div>
-
-              <div className="relative mt-6 h-72 overflow-hidden rounded-[24px] border border-slate-200 bg-white">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.16),_transparent_36%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.1),_transparent_30%)]" />
-                <svg className="absolute inset-0 h-full w-full text-slate-300" preserveAspectRatio="none" viewBox="0 0 100 100">
-                  <rect fill="currentColor" height="28" width="2.5" x="4" y="72" />
-                  <rect fill="currentColor" height="42" width="2.5" x="10" y="58" />
-                  <rect fill="currentColor" height="34" width="2.5" x="16" y="66" />
-                  <rect fill="currentColor" height="50" width="2.5" x="22" y="50" />
-                  <rect fill="currentColor" height="44" width="2.5" x="28" y="56" />
-                  <rect fill="currentColor" height="60" width="2.5" x="34" y="40" />
-                  <rect fill="currentColor" height="46" width="2.5" x="40" y="54" />
-                  <rect fill="currentColor" height="58" width="2.5" x="46" y="42" />
-                  <rect fill="currentColor" height="40" width="2.5" x="52" y="60" />
-                  <rect fill="currentColor" height="68" width="2.5" x="58" y="32" />
-                  <rect fill="currentColor" height="48" width="2.5" x="64" y="52" />
-                  <rect fill="currentColor" height="62" width="2.5" x="70" y="38" />
-                  <rect fill="currentColor" height="74" width="2.5" x="76" y="26" />
-                  <rect fill="currentColor" height="54" width="2.5" x="82" y="46" />
-                  <rect fill="currentColor" height="66" width="2.5" x="88" y="34" />
-                </svg>
-                <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
-                  <polyline fill="none" points="0,76 10,72 18,75 28,64 38,58 48,46 58,52 68,34 78,26 88,18 100,8" stroke="#4f46e5" strokeWidth="2.2" />
-                  <polyline fill="none" points="0,84 10,82 18,79 28,76 38,69 48,60 58,46 68,38 78,29 88,20 100,12" stroke="#10b981" strokeWidth="2.2" strokeDasharray="3 3" />
-                </svg>
-                <div className="absolute left-[18%] top-[54%] rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white shadow-lg">
-                  阶段 01
-                </div>
-                <div className="absolute left-[56%] top-[28%] rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white shadow-lg shadow-indigo-200">
-                  阶段 02 预警
-                </div>
-              </div>
-
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                {highlightedStages.map((stage, index) => (
-                  <div key={stage.id} className={cx('rounded-2xl border p-4 transition-colors', index === 1 ? 'border-indigo-200 bg-indigo-50' : 'border-slate-200 bg-white')}>
-                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">阶段 {String(index + 1).padStart(2, '0')}</div>
-                    <div className="mt-2 text-lg font-bold text-slate-900">{formatCurrency(stage.price)}</div>
-                    <div className="mt-1 text-sm text-slate-500">{index === 0 ? '执行完成' : index === 1 ? '即将触发' : '继续待命'}</div>
+            {selectedFund && pricePulse ? (
+              <div className="mt-6 rounded-[24px] border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-indigo-50 p-5">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="rounded-2xl border border-slate-200 bg-white/90 p-4">
+                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">最新价</div>
+                    <div className="mt-2 text-xl font-bold text-slate-900">{formatFundPrice(pricePulse.latestPrice)}</div>
+                    <div className="mt-1 text-sm text-slate-500">{selectedFund.name}</div>
                   </div>
-                ))}
+                  <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
+                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-500">日内涨跌</div>
+                    <div className="mt-2 text-xl font-bold text-indigo-700">{formatPercent(pricePulse.changePct, 2, true)}</div>
+                    <div className="mt-1 text-sm text-indigo-600">开盘 {formatFundPrice(pricePulse.openPrice)}</div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white/90 p-4">
+                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">成交额</div>
+                    <div className="mt-2 text-xl font-bold text-slate-900">¥ {formatCompactNumber(pricePulse.totalAmount)}</div>
+                    <div className="mt-1 text-sm text-slate-500">成交量 {formatCompactNumber(pricePulse.totalVolume)}</div>
+                  </div>
+                </div>
+
+                <div className="relative mt-6 h-72 overflow-hidden rounded-[24px] border border-slate-200 bg-white">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.16),_transparent_36%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.1),_transparent_30%)]" />
+                  <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
+                    {pricePulse.chart.volumeBars.map((bar) => (
+                      <rect
+                        key={bar.id}
+                        fill={bar.rising ? 'rgba(16,185,129,0.16)' : 'rgba(244,63,94,0.16)'}
+                        height={bar.height}
+                        width={bar.width}
+                        x={bar.x}
+                        y={bar.y}
+                      />
+                    ))}
+                    {pricePulse.chart.candles.map((candle) => (
+                      <g key={candle.id}>
+                        <line
+                          stroke={candle.rising ? '#10b981' : '#f43f5e'}
+                          strokeWidth="0.7"
+                          x1={candle.wickX}
+                          x2={candle.wickX}
+                          y1={candle.wickTop}
+                          y2={candle.wickBottom}
+                        />
+                        <rect
+                          fill={candle.rising ? '#10b981' : '#f43f5e'}
+                          height={candle.bodyHeight}
+                          rx="0.5"
+                          width={Math.max(candle.bodyHeight > 1.3 ? 1.8 : 1.2, 1.2)}
+                          x={candle.bodyX}
+                          y={candle.bodyY}
+                        />
+                      </g>
+                    ))}
+                    <polyline
+                      fill="none"
+                      points={pricePulse.chart.closePoints}
+                      stroke="#312e81"
+                      strokeWidth="1.6"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <div className="absolute left-4 top-4 rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white shadow-lg">
+                    {selectedFund.code} · {pricePulse.lastTimestamp || '分时'}
+                  </div>
+                  <div className="absolute right-4 top-4 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
+                    {pricePulse.asOf || pulseData?.date || ''}
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">日内最高</div>
+                    <div className="mt-2 text-lg font-bold text-slate-900">{formatFundPrice(pricePulse.highPrice)}</div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">日内最低</div>
+                    <div className="mt-2 text-lg font-bold text-slate-900">{formatFundPrice(pricePulse.lowPrice)}</div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">均价参考</div>
+                    <div className="mt-2 text-lg font-bold text-slate-900">{formatFundPrice(pricePulse.avgPrice)}</div>
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="mt-6 rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-sm text-slate-500">
+                {pulseError || marketError
+                  ? `价格脉冲加载失败：${pulseError || marketError}`
+                  : isLoadingPulse
+                    ? '正在加载所选基金的分钟线数据...'
+                    : '请选择一个自选基金后查看 Price Pulse。'}
+              </div>
+            )}
           </Card>
 
           <div className="space-y-6 lg:col-span-2">
@@ -166,7 +564,13 @@ export function HomeExperience({ links }) {
               <div className="mt-6 flex min-h-[180px] items-end justify-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-5">
                 {accumulation.stages.map((stage, index) => (
                   <div key={stage.id} className="flex w-16 flex-col items-center gap-3">
-                    <div className={cx('flex w-full items-end justify-center rounded-t-2xl px-2 py-3 text-xs font-bold text-white', index === accumulation.stages.length - 1 ? 'bg-indigo-600' : 'bg-slate-400')} style={{ height: `${Math.max(stage.weightPercent * 1.8, 44)}px` }}>
+                    <div
+                      className={cx(
+                        'flex w-full items-end justify-center rounded-t-2xl px-2 py-3 text-xs font-bold text-white',
+                        index === accumulation.stages.length - 1 ? 'bg-indigo-600' : 'bg-slate-400'
+                      )}
+                      style={{ height: `${Math.max(stage.weightPercent * 1.8, 44)}px` }}
+                    >
                       {formatPercent(stage.weightPercent, 0)}
                     </div>
                     <span className="text-xs font-semibold text-slate-400">阶段 {index + 1}</span>
@@ -189,96 +593,70 @@ export function HomeExperience({ links }) {
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <SectionHeading
-              eyebrow="Market Watch"
-              title="自选股观察"
-              action={
-                <button className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition-colors hover:text-slate-800" type="button">
-                  <Search className="h-4 w-4" />
-                  搜索市场
-                </button>
-              }
-            />
-            <div className="mt-5 space-y-3">
-              {WATCHLIST.map((item) => (
-                <a key={item.symbol} className={cx('flex items-center justify-between rounded-2xl border px-4 py-4 transition-all', item.active ? 'border-indigo-200 bg-indigo-50' : 'border-slate-200 bg-slate-50 hover:bg-white')} href={links.home}>
+        <Card>
+          <SectionHeading eyebrow="Playbooks" title="历史计划与调试入口" />
+          <div className="mt-5 space-y-3">
+            {HISTORY_PLANS.map((item) => (
+              <div key={item.name} className={cx('rounded-2xl border px-4 py-4', item.active ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-slate-50')}>
+                <div className="flex items-center justify-between gap-4">
                   <div>
-                    <div className="font-semibold text-slate-900">{item.symbol}</div>
-                    <div className="text-sm text-slate-500">{item.note}</div>
+                    <div className="font-semibold">{item.name}</div>
+                    <div className={cx('mt-1 text-sm', item.active ? 'text-slate-300' : 'text-slate-500')}>{item.note}</div>
                   </div>
-                  <div className="text-right">
-                    <div className="font-semibold text-slate-900">{formatCurrency(item.price)}</div>
-                    <div className="mt-1 text-xs text-slate-400">{item.active ? '当前策略标的' : '观察中'}</div>
-                  </div>
-                </a>
-              ))}
-            </div>
-          </Card>
-
-          <Card>
-            <SectionHeading eyebrow="Playbooks" title="历史计划与调试入口" />
-            <div className="mt-5 space-y-3">
-              {HISTORY_PLANS.map((item) => (
-                <div key={item.name} className={cx('rounded-2xl border px-4 py-4', item.active ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-slate-50')}>
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <div className="font-semibold">{item.name}</div>
-                      <div className={cx('mt-1 text-sm', item.active ? 'text-slate-300' : 'text-slate-500')}>{item.note}</div>
-                    </div>
-                    <LayoutGrid className={cx('h-5 w-5', item.active ? 'text-slate-300' : 'text-slate-400')} />
-                  </div>
+                  <LayoutGrid className={cx('h-5 w-5', item.active ? 'text-slate-300' : 'text-slate-400')} />
                 </div>
-              ))}
-            </div>
-
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <Wallet className="h-4 w-4 text-slate-400" />
-                  预留现金
-                </div>
-                <div className="mt-2 text-xl font-bold text-slate-900">{formatCurrency(plan.reserveCapital)}</div>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <TrendingUp className="h-4 w-4 text-slate-400" />
-                  定投总投入
-                </div>
-                <div className="mt-2 text-xl font-bold text-slate-900">{formatCurrency(dca.totalInvestment)}</div>
-              </div>
-            </div>
+            ))}
+          </div>
 
-            <div className="mt-6 flex flex-wrap items-center gap-3">
-              <a className={secondaryButtonClass} href={links.catalog}>打开目录</a>
-              <a className={primaryButtonClass} href={links.history}>
-                查看历史记录
-                <ArrowRight className="h-4 w-4" />
-              </a>
-            </div>
-
-            <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm leading-6 text-emerald-700">
-              <div className="flex items-center gap-2 font-semibold">
-                <Shield className="h-4 w-4" />
-                资金纪律
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <Wallet className="h-4 w-4 text-slate-400" />
+                预留现金
               </div>
-              <p className="mt-2">
-                当前预留资金占总预算 {formatPercent(reserveRatio, 1)}，这让你在阶段二和阶段三出现快速下探时仍有足够现金缓冲。
-              </p>
+              <div className="mt-2 text-xl font-bold text-slate-900">{formatCurrency(plan.reserveCapital)}</div>
             </div>
-
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-              <div className="flex items-center gap-2 font-semibold text-slate-700">
-                <LineChart className="h-4 w-4 text-slate-400" />
-                趋势提示
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <TrendingUp className="h-4 w-4 text-slate-400" />
+                定投总投入
               </div>
-              <p className="mt-2">
-                如果 QQQ 触及 {formatCurrency(nextBuyPrice)} 附近，可以优先回到“加仓配置”页确认第二层权重与总现金使用节奏。
-              </p>
+              <div className="mt-2 text-xl font-bold text-slate-900">{formatCurrency(dca.totalInvestment)}</div>
             </div>
-          </Card>
-        </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <a className={secondaryButtonClass} href={links.catalog}>打开目录</a>
+            <a className={primaryButtonClass} href={links.history}>
+              查看历史记录
+              <ArrowRight className="h-4 w-4" />
+            </a>
+            <button className={subtleButtonClass} type="button" onClick={() => setWatchlistCodes(buildDefaultCodes(marketEntries))}>
+              恢复默认自选
+            </button>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm leading-6 text-emerald-700">
+            <div className="flex items-center gap-2 font-semibold">
+              <Shield className="h-4 w-4" />
+              资金纪律
+            </div>
+            <p className="mt-2">
+              当前预留资金占总预算 {formatPercent(reserveRatio, 1)}，这让你在阶段二和阶段三出现快速下探时仍有足够现金缓冲。
+            </p>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+            <div className="flex items-center gap-2 font-semibold text-slate-700">
+              <LineChart className="h-4 w-4 text-slate-400" />
+              趋势提示
+            </div>
+            <p className="mt-2">
+              如果 QQQ 触及 {formatCurrency(nextBuyPrice)} 附近，可以优先回到“加仓配置”页确认第二层权重与总现金使用节奏。
+            </p>
+          </div>
+        </Card>
       </div>
     </PageShell>
   );

@@ -29,11 +29,25 @@ export function latestNasdaqPriceManifestPath({ inPagesDir = false } = {}) {
   return inPagesDir ? '../data/nasdaq_latest.json' : './data/nasdaq_latest.json';
 }
 
+export function nasdaqDataPath(outputPath, { inPagesDir = false } = {}) {
+  const normalized = String(outputPath || '')
+    .trim()
+    .replace(/^\.\//, '')
+    .replace(/^\/+/, '');
+
+  if (!normalized) {
+    return '';
+  }
+
+  return inPagesDir ? `../${normalized}` : `./${normalized}`;
+}
+
 export async function loadLatestNasdaqPrices({ inPagesDir = false } = {}) {
   const response = await fetch(latestNasdaqPriceManifestPath({ inPagesDir }), {
     headers: {
       Accept: 'application/json'
-    }
+    },
+    cache: 'no-store'
   });
 
   if (!response.ok) {
@@ -61,6 +75,28 @@ export function findLatestNasdaqPrice(entries = [], fundKey = '') {
   }));
 
   return fuzzyMatches.length === 1 ? fuzzyMatches[0] : null;
+}
+
+export async function loadNasdaqMinuteSnapshot(snapshotOrPath, { inPagesDir = false } = {}) {
+  const outputPath = typeof snapshotOrPath === 'string' ? snapshotOrPath : snapshotOrPath?.output_path;
+  const resolvedPath = nasdaqDataPath(outputPath, { inPagesDir });
+
+  if (!resolvedPath) {
+    throw new Error('分钟线数据路径缺失');
+  }
+
+  const response = await fetch(resolvedPath, {
+    headers: {
+      Accept: 'application/json'
+    },
+    cache: 'no-store'
+  });
+
+  if (!response.ok) {
+    throw new Error(`分钟线数据加载失败: HTTP ${response.status}`);
+  }
+
+  return response.json();
 }
 
 export function formatPriceAsOf(snapshot) {
