@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Plus, Trash2, Upload } from 'lucide-react';
-import { buildStages, formatCurrency, formatPercent, readAccumulationState } from '../app/accumulation.js';
+import { formatCurrency, formatPercent, readAccumulationState } from '../app/accumulation.js';
 import { exportHomeDashboardState, importHomeDashboardState, normalizeHomeDashboardState, persistHomeDashboardState, readHomeDashboardState } from '../app/homeDashboard.js';
 import { formatPriceAsOf, loadLatestNasdaqPrices, loadNasdaqDailySeries, loadNasdaqMinuteSnapshot } from '../app/nasdaqPrices.js';
 import { buildPlan, readPlanState } from '../app/plan.js';
@@ -39,6 +39,17 @@ function formatRawNumber(value, digits = 3) {
   }
 
   return Number(value).toFixed(digits).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
+}
+
+function findLatestFiniteValue(values = []) {
+  for (let index = values.length - 1; index >= 0; index -= 1) {
+    const value = values[index];
+    if (Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return null;
 }
 
 function buildDefaultCodes(entries = []) {
@@ -287,11 +298,7 @@ function buildChartGeometry(displayBars = [], overlays = {}) {
 
 export function HomeExperience({ links, inPagesDir = false }) {
   const accumulationState = readAccumulationState();
-  const accumulation = buildStages(accumulationState);
   const planState = readPlanState();
-  const plan = buildPlan(planState);
-  const nextBuyPrice = accumulation.stages[1]?.price ?? accumulationState.basePrice;
-  const reserveRatio = planState.totalBudget > 0 ? plan.reserveCapital / planState.totalBudget * 100 : 0;
   const [dashboardState] = useState(() => readHomeDashboardState());
 
   const [marketEntries, setMarketEntries] = useState([]);
@@ -478,6 +485,45 @@ export function HomeExperience({ links, inPagesDir = false }) {
     '15m': aggregateMinuteBars(normalizedMinuteBars, 15),
     '1d': buildDailyBars(dailySeries)
   }), [dailySeries, normalizedMinuteBars]);
+  const dailyBars = fullBarsByTimeframe['1d'] || [];
+  const dailyMa120Values = useMemo(
+    () => buildMovingAverageValues(dailyBars, 120, { allowPartial: dailyBars.length < 120 }),
+    [dailyBars]
+  );
+  const dailyMa200Values = useMemo(
+    () => buildMovingAverageValues(dailyBars, 200, { allowPartial: dailyBars.length < 200 }),
+    [dailyBars]
+  );
+  const latestDailyMa120 = useMemo(
+    () => findLatestFiniteValue(dailyMa120Values),
+    [dailyMa120Values]
+  );
+  const latestDailyMa200 = useMemo(
+    () => findLatestFiniteValue(dailyMa200Values),
+    [dailyMa200Values]
+  );
+  const strategyReferencePrice = useMemo(() => {
+    if (Number.isFinite(latestDailyMa200)) {
+      return latestDailyMa200;
+    }
+
+    if (Number.isFinite(latestDailyMa120)) {
+      return latestDailyMa120;
+    }
+
+    const currentPrice = Number(selectedFund?.current_price);
+    if (Number.isFinite(currentPrice) && currentPrice > 0) {
+      return currentPrice;
+    }
+
+    return Number(planState.basePrice) || Number(accumulationState.basePrice) || 0;
+  }, [accumulationState.basePrice, latestDailyMa120, latestDailyMa200, planState.basePrice, selectedFund]);
+  const plan = useMemo(
+    () => buildPlan({ ...planState, basePrice: strategyReferencePrice }),
+    [planState, strategyReferencePrice]
+  );
+  const reserveRatio = planState.totalBudget > 0 ? plan.reserveCapital / planState.totalBudget * 100 : 0;
+  const nextBuyPrice = plan.layers[1]?.price ?? strategyReferencePrice;
 
   const fullBars = fullBarsByTimeframe[timeframe] || [];
   const displayBars = useMemo(
@@ -547,8 +593,7 @@ export function HomeExperience({ links, inPagesDir = false }) {
       lowPrice,
       totalAmount,
       totalVolume,
-      primaryMetricLabel: hasAmountData ? '成交额' : '成交量',
-      primaryMetricValue: hasAmountData ? `¥ ${formatCompactNumber(totalAmount)}` : formatCompactNumber(totalVolume),
+      volumeMetricValue: formatCompactNumber(totalVolume),
       hasAmountData,
       changePct,
       asOf: formatPriceAsOf(selectedFund)
@@ -634,7 +679,7 @@ export function HomeExperience({ links, inPagesDir = false }) {
         title="QQQ 建仓策略总览"
         badges={[
           <Pill key="status" tone="indigo">运行中</Pill>,
-          <Pill key="layers" tone="slate">{accumulation.stages.length} 层建仓</Pill>
+          <Pill key="layers" tone="slate">{plan.layers.length} 层建仓</Pill>
         ]}
         actions={
           <>
@@ -780,10 +825,10 @@ export function HomeExperience({ links, inPagesDir = false }) {
         </Card>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard accent="indigo" eyebrow="Portfolio Budget" value={formatCurrency(accumulation.investedCapital)} note="当前金字塔策略总预算" progress={Math.max(100 - reserveRatio, 0)} />
+          <StatCard accent="indigo" eyebrow="Portfolio Budget" value={formatCurrency(plan.investableCapital)} note="当前策略可执行预算" progress={Math.max(100 - reserveRatio, 0)} />
           <StatCard eyebrow="Reserve Cash" value={formatCurrency(plan.reserveCapital)} note={`${formatPercent(reserveRatio, 1)} 作为流动性缓冲`} />
           <StatCard eyebrow="Next Trigger" value={formatCurrency(nextBuyPrice)} note="下一层计划买入价位" />
-          <StatCard accent="emerald" eyebrow="Average Cost" value={formatCurrency(accumulation.averageCost)} note={`${formatPercent(4.2, 1, true)} 假设增长空间`} />
+          <StatCard accent="emerald" eyebrow="Average Cost" value={formatCurrency(plan.averageCost)} note="按 MA200 基准重算的预估平均成本" />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-5">
@@ -825,18 +870,20 @@ export function HomeExperience({ links, inPagesDir = false }) {
                         ))}
                       </div>
 
-                      <div className="grid gap-2 text-right sm:grid-cols-3 lg:min-w-[360px]">
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{pricePulse.primaryMetricLabel}</div>
-                          <div className="mt-1 text-sm font-semibold text-slate-900">{pricePulse.primaryMetricValue}</div>
-                        </div>
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">MA120</div>
-                          <div className="mt-1 text-sm font-semibold text-violet-600">{formatRawNumber(activeMa120)}</div>
-                        </div>
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">MA200</div>
-                          <div className="mt-1 text-sm font-semibold text-amber-600">{formatRawNumber(activeMa200)}</div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 lg:min-w-[360px]">
+                        <div className="grid gap-2 text-right sm:grid-cols-3">
+                          <div className="rounded-2xl bg-white px-3 py-2">
+                            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">成交量</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-900">{pricePulse.volumeMetricValue}</div>
+                          </div>
+                          <div className="rounded-2xl bg-white px-3 py-2">
+                            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">MA120</div>
+                            <div className="mt-1 text-sm font-semibold text-violet-600">{formatRawNumber(activeMa120)}</div>
+                          </div>
+                          <div className="rounded-2xl bg-white px-3 py-2">
+                            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">MA200</div>
+                            <div className="mt-1 text-sm font-semibold text-amber-600">{formatRawNumber(activeMa200)}</div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -970,24 +1017,33 @@ export function HomeExperience({ links, inPagesDir = false }) {
 
           <div className="space-y-6 lg:col-span-2">
             <Card>
-              <SectionHeading eyebrow="Execution Map" title="建仓计划详情" />
+              <SectionHeading
+                eyebrow="Execution Map"
+                title="建仓计划详情"
+                action={
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Pill tone="amber">MA200 基准</Pill>
+                    <Pill tone="slate">{formatCurrency(strategyReferencePrice)}</Pill>
+                  </div>
+                }
+              />
               <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
                 <table className="w-full text-left text-sm">
                   <thead className="border-b border-slate-200 bg-slate-50/80 text-xs uppercase text-slate-500">
                     <tr>
-                      <th className="px-4 py-3 font-semibold">阶段</th>
+                      <th className="px-4 py-3 font-semibold">批次</th>
                       <th className="px-4 py-3 font-semibold">价格</th>
                       <th className="px-4 py-3 font-semibold">跌幅</th>
                       <th className="px-4 py-3 font-semibold">金额</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
-                    {accumulation.stages.map((stage, index) => (
-                      <tr key={stage.id}>
+                    {plan.layers.map((layer, index) => (
+                      <tr key={layer.id}>
                         <td className="px-4 py-3 font-semibold text-slate-700">{String(index + 1).padStart(2, '0')}</td>
-                        <td className="px-4 py-3 text-slate-600">{formatCurrency(stage.price)}</td>
-                        <td className="px-4 py-3 text-slate-600">{index === 0 ? '基准' : formatPercent(stage.drawdown, 1)}</td>
-                        <td className="px-4 py-3 text-slate-900">{formatCurrency(stage.amount)}</td>
+                        <td className="px-4 py-3 text-slate-600">{formatCurrency(layer.price)}</td>
+                        <td className="px-4 py-3 text-slate-600">{index === 0 ? '基准' : formatPercent(layer.drawdown, 1)}</td>
+                        <td className="px-4 py-3 text-slate-900">{formatCurrency(layer.amount)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -998,16 +1054,16 @@ export function HomeExperience({ links, inPagesDir = false }) {
             <Card>
               <SectionHeading eyebrow="Capital Mix" title="资金配置模型" />
               <div className="mt-6 flex min-h-[180px] items-end justify-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                {accumulation.stages.map((stage, index) => (
-                  <div key={stage.id} className="flex w-16 flex-col items-center gap-3">
+                {plan.layers.map((layer, index) => (
+                  <div key={layer.id} className="flex w-16 flex-col items-center gap-3">
                     <div
                       className={cx(
                         'flex w-full items-end justify-center rounded-t-2xl px-2 py-3 text-xs font-bold text-white',
-                        index === accumulation.stages.length - 1 ? 'bg-indigo-600' : 'bg-slate-400'
+                        index === plan.layers.length - 1 ? 'bg-indigo-600' : 'bg-slate-400'
                       )}
-                      style={{ height: `${Math.max(stage.weightPercent * 1.8, 44)}px` }}
+                      style={{ height: `${Math.max(layer.weight * 1.8, 44)}px` }}
                     >
-                      {formatPercent(stage.weightPercent, 0)}
+                      {formatPercent(layer.weight, 0)}
                     </div>
                     <span className="text-xs font-semibold text-slate-400">阶段 {index + 1}</span>
                   </div>
