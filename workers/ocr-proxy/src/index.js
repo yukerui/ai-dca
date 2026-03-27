@@ -1,4 +1,5 @@
 import { connect } from 'cloudflare:sockets';
+import { deriveFundSwitchComparison, sanitizeFundSwitchComparison, sanitizeFundSwitchRows } from '../../../src/app/fundSwitchCore.js';
 import { buildOcrUserPrompt, DEFAULT_OCR_MODEL, FUND_SWITCH_SYSTEM_PROMPT, PROMPT_VERSION } from './geminiPrompt.js';
 
 const JSON_HEADERS = {
@@ -87,172 +88,74 @@ function normalizeDate(rawValue = '') {
   return text;
 }
 
-function sanitizeComparison(comparison = {}) {
-  return {
-    sourceCode: normalizeText(comparison.sourceCode),
-    sourceSellShares: Math.max(Number(comparison.sourceSellShares) || 0, 0),
-    sourceCurrentPrice: Math.max(Number(comparison.sourceCurrentPrice) || 0, 0),
-    targetCode: normalizeText(comparison.targetCode),
-    targetBuyShares: Math.max(Number(comparison.targetBuyShares) || 0, 0),
-    targetCurrentPrice: Math.max(Number(comparison.targetCurrentPrice) || 0, 0),
-    switchCost: Math.max(Number(comparison.switchCost) || 0, 0),
-    extraCash: Math.max(Number(comparison.extraCash) || 0, 0),
-    feeTradeCount: Math.max(Number(comparison.feeTradeCount) || 0, 0)
-  };
-}
-
 function buildRowId(index) {
   return `switch-import-${Date.now()}-${index + 1}`;
 }
 
+function normalizeAmount(value) {
+  return round(Math.max(Number(value) || 0, 0), 2);
+}
+
+function maybeRepairShares(row, warnings) {
+  const price = row.price;
+  const shares = row.shares;
+  const amount = row.amount;
+
+  if (!(price > 0 && shares > 0 && amount > 0)) {
+    return row;
+  }
+
+  const inferredShares = amount / price;
+  const hundredLotCandidate = Math.round(inferredShares / 100) * 100;
+  const integerCandidate = Math.round(inferredShares);
+  const amountMismatch = Math.abs((price * shares) - amount);
+  const hasMajorMismatch = amountMismatch > Math.max(1, amount * 0.002);
+  let nextShares = shares;
+  let reason = '';
+
+  if (Math.abs(hundredLotCandidate - inferredShares) <= 0.5 && Math.abs(shares - hundredLotCandidate) > 0.01) {
+    nextShares = hundredLotCandidate;
+    reason = '按成交额/单价修正为 100 份整数';
+  } else if (Math.abs(integerCandidate - inferredShares) <= 0.05 && Math.abs(shares - integerCandidate) > 0.01) {
+    nextShares = integerCandidate;
+    reason = '按成交额/单价修正为整数份额';
+  } else if (hasMajorMismatch) {
+    nextShares = round(inferredShares, 2);
+    reason = '按成交额/单价回推份额';
+  }
+
+  if (!reason) {
+    return row;
+  }
+
+  warnings.push(`${row.date || '未标注日期'} ${row.code} ${reason}`);
+  return {
+    ...row,
+    shares: round(nextShares, 2)
+  };
+}
+
 function sanitizeRows(rows = []) {
-  return rows
-    .map((row, index) => ({
-      id: normalizeText(row?.id) || buildRowId(index),
-      date: normalizeDate(row?.date || ''),
-      code: normalizeText(row?.code || ''),
-      type: normalizeTradeType(row?.type || ''),
-      price: round(Math.max(Number(row?.price) || 0, 0), 4),
-      shares: round(Math.max(Number(row?.shares) || 0, 0), 2)
-    }))
-    .filter((row) => row.code && row.type && row.price > 0 && row.shares > 0);
-}
-
-function getRowAmount(row) {
-  return round((Number(row?.price) || 0) * (Number(row?.shares) || 0), 2);
-}
-
-function getRowTimestamp(row) {
-  if (!row?.date) {
-    return Number.NaN;
-  }
-
-  const timestamp = Date.parse(String(row.date).replace(' ', 'T'));
-  return Number.isFinite(timestamp) ? timestamp : Number.NaN;
-}
-
-function summarizeByCode(rows, type) {
-  const groups = new Map();
-
-  for (const row of rows) {
-    if (row.type !== type || !row.code) {
-      continue;
-    }
-
-    const current = groups.get(row.code) || {
-      code: row.code,
-      shares: 0,
-      amount: 0
-    };
-
-    current.shares += row.shares;
-    current.amount += getRowAmount(row);
-    groups.set(row.code, current);
-  }
-
-  return [...groups.values()].sort((left, right) => right.amount - left.amount || right.shares - left.shares);
-}
-
-function inferComparisonFromRows(rows, fallbackComparison) {
-  const fallback = sanitizeComparison(fallbackComparison);
-
-  for (let index = 0; index < rows.length - 1; index += 1) {
-    const first = rows[index];
-    const second = rows[index + 1];
-    if (first.type === second.type || first.code === second.code) {
-      continue;
-    }
-
-    const buy = first.type === '买入' ? first : second;
-    const sell = first.type === '卖出' ? first : second;
-    if (!buy || !sell) {
-      continue;
-    }
-
-    const buyAmount = getRowAmount(buy);
-    const sellAmount = getRowAmount(sell);
-
-    return {
-      ...fallback,
-      sourceCode: sell.code || fallback.sourceCode,
-      sourceSellShares: round(sell.shares, 2),
-      targetCode: buy.code || fallback.targetCode,
-      targetBuyShares: round(buy.shares, 2),
-      switchCost: buyAmount > 0 ? buyAmount : fallback.switchCost,
-      extraCash: round(Math.max(buyAmount - sellAmount, 0), 2),
-      feeTradeCount: 2
-    };
-  }
-
-  let bestPair = null;
-
-  for (let index = 0; index < rows.length; index += 1) {
-    for (let inner = index + 1; inner < rows.length; inner += 1) {
-      const first = rows[index];
-      const second = rows[inner];
-      if (first.type === second.type || first.code === second.code) {
-        continue;
-      }
-
-      const buy = first.type === '买入' ? first : second;
-      const sell = first.type === '卖出' ? first : second;
-      if (!buy || !sell) {
-        continue;
-      }
-
-      const buyAmount = getRowAmount(buy);
-      const sellAmount = getRowAmount(sell);
-      const buyTime = getRowTimestamp(buy);
-      const sellTime = getRowTimestamp(sell);
-      const timeGap = Number.isFinite(buyTime) && Number.isFinite(sellTime) ? Math.abs(buyTime - sellTime) : 24 * 60 * 60 * 1000;
-      const amountGap = Math.abs(buyAmount - sellAmount);
-      const amountSimilarity = 1 - Math.min(amountGap / Math.max(buyAmount, sellAmount, 1), 1);
-      const score = (amountSimilarity * 100) - (timeGap / 60000);
-
-      if (!bestPair || score > bestPair.score) {
-        bestPair = { buy, sell, score };
-      }
-    }
-  }
-
-  if (bestPair) {
-    const buyAmount = getRowAmount(bestPair.buy);
-    const sellAmount = getRowAmount(bestPair.sell);
-
-    return {
-      ...fallback,
-      sourceCode: bestPair.sell.code || fallback.sourceCode,
-      sourceSellShares: round(bestPair.sell.shares, 2),
-      targetCode: bestPair.buy.code || fallback.targetCode,
-      targetBuyShares: round(bestPair.buy.shares, 2),
-      switchCost: buyAmount > 0 ? buyAmount : fallback.switchCost,
-      extraCash: round(Math.max(buyAmount - sellAmount, 0), 2),
-      feeTradeCount: 2
-    };
-  }
-
-  const sellGroups = summarizeByCode(rows, '卖出');
-  const buyGroups = summarizeByCode(rows, '买入');
-  const source = sellGroups[0];
-  const target = buyGroups[0];
-  const totalSellAmount = round(sellGroups.reduce((sum, item) => sum + item.amount, 0), 2);
-  const totalBuyAmount = round(buyGroups.reduce((sum, item) => sum + item.amount, 0), 2);
+  const normalizationWarnings = [];
+  const normalizedRows = rows.map((row, index) => maybeRepairShares({
+    id: normalizeText(row?.id) || buildRowId(index),
+    date: normalizeDate(row?.date || ''),
+    code: normalizeText(row?.code || ''),
+    type: normalizeTradeType(row?.type || ''),
+    price: round(Math.max(Number(row?.price) || 0, 0), 4),
+    shares: round(Math.max(Number(row?.shares) || 0, 0), 2),
+    amount: normalizeAmount(row?.amount)
+  }, normalizationWarnings));
 
   return {
-    ...fallback,
-    sourceCode: source?.code || fallback.sourceCode,
-    sourceSellShares: source ? round(source.shares, 2) : fallback.sourceSellShares,
-    targetCode: target?.code || fallback.targetCode,
-    targetBuyShares: target ? round(target.shares, 2) : fallback.targetBuyShares,
-    switchCost: totalBuyAmount > 0 ? totalBuyAmount : fallback.switchCost,
-    extraCash: round(Math.max(totalBuyAmount - totalSellAmount, 0), 2),
-    feeTradeCount: rows.length ? Math.min(rows.length, 2) : fallback.feeTradeCount
+    rows: sanitizeFundSwitchRows(normalizedRows, { filterInvalid: true, idPrefix: 'switch-import' }),
+    warnings: normalizationWarnings
   };
 }
 
 function buildPreviewLines(rows, warnings) {
   if (rows.length) {
-    return rows.slice(0, 6).map((row) => `${row.date || '无日期'} | ${row.type} | ${row.code} | ${row.price} | ${row.shares}`);
+    return rows.slice(0, 6).map((row) => `${row.date || '无日期'} | ${row.type} | ${row.code} | ${row.price} | ${row.shares} | ${row.amount}`);
   }
 
   return warnings.filter(Boolean).slice(0, 6);
@@ -593,12 +496,16 @@ async function handleOcr(request, env) {
   }
 
   const startedAt = Date.now();
-  const fallbackComparison = parseFallbackComparison(formData.get('fallbackComparison'));
+  const fallbackComparison = sanitizeFundSwitchComparison(parseFallbackComparison(formData.get('fallbackComparison')));
   const { model, payload } = await callUpstreamModel(file, env);
   const extracted = parseModelResponse(payload);
-  const rows = sanitizeRows(extracted.rows || []);
-  const warnings = Array.isArray(extracted.warnings) ? extracted.warnings.map((item) => normalizeText(item)).filter(Boolean) : [];
-  const comparison = inferComparisonFromRows(rows, fallbackComparison);
+  const rowResult = sanitizeRows(extracted.rows || []);
+  const rows = rowResult.rows;
+  const warnings = [
+    ...(Array.isArray(extracted.warnings) ? extracted.warnings.map((item) => normalizeText(item)).filter(Boolean) : []),
+    ...rowResult.warnings
+  ];
+  const comparison = deriveFundSwitchComparison(rows, fallbackComparison, fallbackComparison.strategy);
 
   return jsonResponse({
     ok: true,
