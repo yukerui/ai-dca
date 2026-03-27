@@ -870,19 +870,19 @@ export function HomeExperience({ links, inPagesDir = false }) {
                         ))}
                       </div>
 
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 lg:min-w-[360px]">
-                        <div className="grid gap-2 text-right sm:grid-cols-3">
-                          <div className="rounded-2xl bg-white px-3 py-2">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 lg:min-w-[220px]">
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-4 rounded-2xl bg-white px-3 py-2">
                             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">成交量</div>
-                            <div className="mt-1 text-sm font-semibold text-slate-900">{pricePulse.volumeMetricValue}</div>
+                            <div className="text-sm font-semibold text-slate-900">{pricePulse.volumeMetricValue}</div>
                           </div>
-                          <div className="rounded-2xl bg-white px-3 py-2">
+                          <div className="flex items-center justify-between gap-4 rounded-2xl bg-white px-3 py-2">
                             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">MA120</div>
-                            <div className="mt-1 text-sm font-semibold text-violet-600">{formatRawNumber(activeMa120)}</div>
+                            <div className="text-sm font-semibold text-violet-600">{formatRawNumber(activeMa120)}</div>
                           </div>
-                          <div className="rounded-2xl bg-white px-3 py-2">
+                          <div className="flex items-center justify-between gap-4 rounded-2xl bg-white px-3 py-2">
                             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">MA200</div>
-                            <div className="mt-1 text-sm font-semibold text-amber-600">{formatRawNumber(activeMa200)}</div>
+                            <div className="text-sm font-semibold text-amber-600">{formatRawNumber(activeMa200)}</div>
                           </div>
                         </div>
                       </div>
