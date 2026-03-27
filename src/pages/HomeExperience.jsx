@@ -831,8 +831,8 @@ export function HomeExperience({ links, inPagesDir = false }) {
           <StatCard accent="emerald" eyebrow="Average Cost" value={formatCurrency(plan.averageCost)} note="按 MA200 基准重算的预估平均成本" />
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-5">
-          <Card className="lg:col-span-3">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.75fr)_minmax(320px,0.95fr)]">
+          <Card>
             <SectionHeading
               eyebrow="Price Pulse"
               title="价格走势与基金脉冲"
@@ -840,9 +840,8 @@ export function HomeExperience({ links, inPagesDir = false }) {
             />
 
             {selectedFund && pricePulse ? (
-              <div className="mt-6 space-y-4 rounded-[28px] border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-indigo-50 p-5">
-                <div className="flex flex-col gap-4 rounded-[24px] border border-slate-200 bg-white/95 p-4">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="mt-6 flex flex-col gap-5 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-100 md:p-6">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div className="space-y-1">
                       <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">K-Line Monitor</div>
                       <div className="text-2xl font-extrabold text-slate-900">{formatFundPrice(pricePulse.latestPrice)}</div>
@@ -851,7 +850,7 @@ export function HomeExperience({ links, inPagesDir = false }) {
                       </div>
                     </div>
 
-                    <div className="flex flex-col gap-3 lg:items-end">
+                    <div className="flex flex-col gap-3 xl:items-end">
                       <div className="flex flex-wrap items-center gap-2 rounded-full bg-slate-100 p-1">
                         {TIMEFRAME_OPTIONS.map((option) => (
                           <button
@@ -870,7 +869,7 @@ export function HomeExperience({ links, inPagesDir = false }) {
                         ))}
                       </div>
 
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 lg:min-w-[220px]">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 xl:min-w-[220px]">
                         <div className="space-y-2">
                           <div className="flex items-center justify-between gap-4 rounded-2xl bg-white px-3 py-2">
                             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">成交量</div>
@@ -903,7 +902,7 @@ export function HomeExperience({ links, inPagesDir = false }) {
 
                   <div className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-white">
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.12),_transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.08),_transparent_32%)]" />
-                    <svg className="relative h-[420px] w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
+                    <svg className="relative h-[480px] w-full md:h-[560px]" preserveAspectRatio="none" viewBox="0 0 100 100">
                       <line stroke="rgba(148,163,184,0.16)" strokeDasharray="1.5 2.5" strokeWidth="0.4" x1="4" x2="96" y1="16" y2="16" />
                       <line stroke="rgba(148,163,184,0.16)" strokeDasharray="1.5 2.5" strokeWidth="0.4" x1="4" x2="96" y1="32" y2="32" />
                       <line stroke="rgba(148,163,184,0.16)" strokeDasharray="1.5 2.5" strokeWidth="0.4" x1="4" x2="96" y1="48" y2="48" />
@@ -1002,7 +1001,6 @@ export function HomeExperience({ links, inPagesDir = false }) {
                       </div>
                     </div>
                   </div>
-                </div>
               </div>
             ) : (
               <div className="mt-6 rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-sm text-slate-500">
