@@ -1,19 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Download, LayoutGrid, LineChart, Plus, Shield, Trash2, TrendingUp, Upload, Wallet } from 'lucide-react';
+import { Download, Plus, Trash2, Upload } from 'lucide-react';
 import { buildStages, formatCurrency, formatPercent, readAccumulationState } from '../app/accumulation.js';
 import { buildDcaProjection, readDcaState } from '../app/dca.js';
 import { exportHomeDashboardState, importHomeDashboardState, normalizeHomeDashboardState, persistHomeDashboardState, readHomeDashboardState } from '../app/homeDashboard.js';
-import { formatPriceAsOf, loadLatestNasdaqPrices, loadNasdaqMinuteSnapshot } from '../app/nasdaqPrices.js';
+import { formatPriceAsOf, loadLatestNasdaqPrices, loadNasdaqDailySnapshots, loadNasdaqMinuteSnapshot } from '../app/nasdaqPrices.js';
 import { buildPlan, readPlanState } from '../app/plan.js';
 import { Card, PageHero, PageShell, Pill, SectionHeading, SelectField, StatCard, cx, primaryButtonClass, secondaryButtonClass, subtleButtonClass } from '../components/experience-ui.jsx';
 
 const DEFAULT_WATCHLIST_CODES = ['513100', '159501', '159660'];
-const CHART_POINT_LIMIT = 28;
-
-const HISTORY_PLANS = [
-  { name: '科技股累积', note: '平均成本: $548.05', active: true },
-  { name: '股息增长', note: '平均成本: $42.10' }
+const TIMEFRAME_OPTIONS = [
+  { key: '1m', label: '1m', note: '分时' },
+  { key: '15m', label: '15m', note: '短线' },
+  { key: '1d', label: '1d', note: '日线' }
 ];
+const MAX_CHART_BARS = {
+  '1m': 64,
+  '15m': 32,
+  '1d': 120
+};
 
 function formatFundPrice(value) {
   return formatCurrency(value, '¥', 3);
@@ -26,85 +30,16 @@ function formatCompactNumber(value) {
   }).format(Number(value) || 0);
 }
 
-function sampleBars(bars = [], limit = CHART_POINT_LIMIT) {
-  if (!Array.isArray(bars) || bars.length <= limit) {
-    return Array.isArray(bars) ? bars : [];
+function formatRawNumber(value, digits = 3) {
+  if (value === null || value === undefined || value === '') {
+    return '--';
   }
 
-  const step = (bars.length - 1) / Math.max(limit - 1, 1);
-  return Array.from({ length: limit }, (_, index) => bars[Math.min(bars.length - 1, Math.round(index * step))]);
-}
-
-function scaleChartY(value, minValue, maxValue) {
-  if (!Number.isFinite(value) || !Number.isFinite(minValue) || !Number.isFinite(maxValue) || maxValue <= minValue) {
-    return 50;
+  if (!Number.isFinite(Number(value))) {
+    return '--';
   }
 
-  const ratio = (value - minValue) / (maxValue - minValue);
-  return 84 - ratio * 68;
-}
-
-function buildChartGeometry(bars = []) {
-  if (!bars.length) {
-    return { candles: [], volumeBars: [], closePoints: '' };
-  }
-
-  const numericPrices = bars.flatMap((bar) => [bar.open, bar.close, bar.high, bar.low].map((value) => Number(value))).filter(Number.isFinite);
-  const numericVolumes = bars.map((bar) => Number(bar.volume) || 0);
-  const minPrice = Math.min(...numericPrices);
-  const maxPrice = Math.max(...numericPrices);
-  const maxVolume = Math.max(...numericVolumes, 1);
-  const gap = bars.length > 1 ? 92 / (bars.length - 1) : 0;
-  const candleWidth = Math.max(Math.min(gap * 0.52, 2.8), 1.3);
-
-  const candles = bars.map((bar, index) => {
-    const x = 4 + gap * index;
-    const open = Number(bar.open) || 0;
-    const close = Number(bar.close) || open;
-    const high = Number(bar.high) || Math.max(open, close);
-    const low = Number(bar.low) || Math.min(open, close);
-    const openY = scaleChartY(open, minPrice, maxPrice);
-    const closeY = scaleChartY(close, minPrice, maxPrice);
-    const highY = scaleChartY(high, minPrice, maxPrice);
-    const lowY = scaleChartY(low, minPrice, maxPrice);
-    const bodyY = Math.min(openY, closeY);
-    const bodyHeight = Math.max(Math.abs(closeY - openY), 1.3);
-
-    return {
-      id: `${bar.datetime || index}`,
-      x,
-      wickX: x,
-      wickTop: highY,
-      wickBottom: lowY,
-      bodyX: x - candleWidth / 2,
-      bodyY,
-      bodyHeight,
-      rising: close >= open
-    };
-  });
-
-  const volumeBars = bars.map((bar, index) => {
-    const x = 4 + gap * index;
-    const height = Math.max((Number(bar.volume) || 0) / maxVolume * 18, 1.2);
-    return {
-      id: `volume-${bar.datetime || index}`,
-      x: x - candleWidth / 2,
-      y: 96 - height,
-      width: candleWidth,
-      height,
-      rising: (Number(bar.close) || 0) >= (Number(bar.open) || 0)
-    };
-  });
-
-  const closePoints = bars
-    .map((bar, index) => {
-      const x = 4 + gap * index;
-      const y = scaleChartY(Number(bar.close) || 0, minPrice, maxPrice);
-      return `${x},${y}`;
-    })
-    .join(' ');
-
-  return { candles, volumeBars, closePoints };
+  return Number(value).toFixed(digits).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
 }
 
 function buildDefaultCodes(entries = []) {
@@ -117,6 +52,254 @@ function buildDefaultCodes(entries = []) {
   return entries.slice(0, 3).map((entry) => entry.code);
 }
 
+function normalizeMinuteBars(rawBars = []) {
+  return rawBars
+    .filter((bar) => Number.isFinite(Number(bar.close)))
+    .map((bar, index) => ({
+      id: String(bar.datetime || index),
+      sourceIndex: index,
+      label: String(bar.datetime || '').slice(11, 16),
+      longLabel: String(bar.datetime || '').replace('T', ' '),
+      open: Number(bar.open) || 0,
+      close: Number(bar.close) || 0,
+      high: Number(bar.high) || 0,
+      low: Number(bar.low) || 0,
+      volume: Number(bar.volume) || 0,
+      amount: Number(bar.amount) || 0
+    }));
+}
+
+function aggregateMinuteBars(minuteBars = [], groupSize = 15) {
+  if (!minuteBars.length) {
+    return [];
+  }
+
+  const aggregated = [];
+  for (let index = 0; index < minuteBars.length; index += groupSize) {
+    const chunk = minuteBars.slice(index, index + groupSize);
+    if (!chunk.length) {
+      continue;
+    }
+
+    const firstBar = chunk[0];
+    const lastBar = chunk[chunk.length - 1];
+    aggregated.push({
+      id: `${firstBar.id}-${lastBar.id}`,
+      sourceIndex: aggregated.length,
+      label: lastBar.label,
+      longLabel: `${firstBar.longLabel.slice(11, 16)} - ${lastBar.longLabel.slice(11, 16)}`,
+      open: firstBar.open,
+      close: lastBar.close,
+      high: Math.max(...chunk.map((bar) => bar.high)),
+      low: Math.min(...chunk.map((bar) => bar.low)),
+      volume: chunk.reduce((sum, bar) => sum + bar.volume, 0),
+      amount: chunk.reduce((sum, bar) => sum + bar.amount, 0)
+    });
+  }
+
+  return aggregated;
+}
+
+function buildDailyBarsFromSnapshots(snapshots = []) {
+  return snapshots
+    .filter((snapshot) => Array.isArray(snapshot?.bars) && snapshot.bars.length)
+    .sort((left, right) => String(left.date || '').localeCompare(String(right.date || '')))
+    .map((snapshot, index) => {
+      const firstBar = snapshot.bars[0];
+      const lastBar = snapshot.bars[snapshot.bars.length - 1];
+      return {
+        id: String(snapshot.date || index),
+        sourceIndex: index,
+        label: String(snapshot.date || '').slice(5),
+        longLabel: String(snapshot.date || ''),
+        open: Number(firstBar?.open) || Number(firstBar?.close) || 0,
+        close: Number(lastBar?.close) || Number(lastBar?.open) || 0,
+        high: Math.max(...snapshot.bars.map((bar) => Number(bar.high) || Number(bar.close) || 0)),
+        low: Math.min(...snapshot.bars.map((bar) => Number(bar.low) || Number(bar.close) || 0)),
+        volume: snapshot.bars.reduce((sum, bar) => sum + (Number(bar.volume) || 0), 0),
+        amount: snapshot.bars.reduce((sum, bar) => sum + (Number(bar.amount) || 0), 0)
+      };
+    });
+}
+
+function limitBarsForChart(bars = [], limit = 64) {
+  if (!bars.length || bars.length <= limit) {
+    return bars;
+  }
+
+  const step = (bars.length - 1) / Math.max(limit - 1, 1);
+  return Array.from({ length: limit }, (_, index) => bars[Math.min(bars.length - 1, Math.round(index * step))]);
+}
+
+function buildMovingAverageValues(bars = [], period = 5, { allowPartial = false } = {}) {
+  const values = [];
+  const closes = [];
+  let rollingSum = 0;
+
+  bars.forEach((bar, index) => {
+    const close = Number(bar.close) || 0;
+    closes.push(close);
+    rollingSum += close;
+
+    if (closes.length > period) {
+      rollingSum -= closes[index - period];
+    }
+
+    if (allowPartial) {
+      values.push(rollingSum / closes.length);
+      return;
+    }
+
+    values.push(closes.length >= period ? rollingSum / period : null);
+  });
+
+  return values;
+}
+
+function buildMappedMovingAverage(displayBars = [], fullBars = [], period = 5, { allowPartial = false } = {}) {
+  const fullValues = buildMovingAverageValues(fullBars, period, { allowPartial });
+  return displayBars.map((bar) => fullValues[bar.sourceIndex] ?? null);
+}
+
+function scalePrice(value, minValue, maxValue, top = 8, bottom = 74) {
+  if (!Number.isFinite(value) || !Number.isFinite(minValue) || !Number.isFinite(maxValue) || maxValue <= minValue) {
+    return (top + bottom) / 2;
+  }
+
+  const ratio = (value - minValue) / (maxValue - minValue);
+  return bottom - ratio * (bottom - top);
+}
+
+function buildLineSegments(points = []) {
+  const segments = [];
+  let current = [];
+
+  points.forEach((point) => {
+    if (!point) {
+      if (current.length > 1) {
+        segments.push(current.join(' '));
+      }
+      current = [];
+      return;
+    }
+
+    current.push(`${point.x},${point.y}`);
+  });
+
+  if (current.length > 1) {
+    segments.push(current.join(' '));
+  }
+
+  return segments;
+}
+
+function buildChartGeometry(displayBars = [], overlays = {}) {
+  if (!displayBars.length) {
+    return {
+      candles: [],
+      volumeBars: [],
+      ma120Segments: [],
+      ma200Segments: [],
+      xPositions: [],
+      scaleMeta: null
+    };
+  }
+
+  const overlayValues = [
+    ...(overlays.ma120 || []),
+    ...(overlays.ma200 || [])
+  ].filter((value) => Number.isFinite(value));
+  const priceValues = [
+    ...displayBars.flatMap((bar) => [bar.open, bar.close, bar.high, bar.low]),
+    ...overlayValues
+  ].filter(Number.isFinite);
+  const minPrice = Math.min(...priceValues);
+  const maxPrice = Math.max(...priceValues);
+  const maxVolume = Math.max(...displayBars.map((bar) => bar.volume), 1);
+  const gap = displayBars.length > 1 ? 92 / (displayBars.length - 1) : 0;
+  const candleWidth = displayBars.length > 1
+    ? Math.max(Math.min(gap * 0.42, 2.8), 1.3)
+    : 14;
+  const hitBoxWidth = displayBars.length > 1 ? Math.max(gap, 3) : 92;
+
+  const candles = displayBars.map((bar, index) => {
+    const x = displayBars.length > 1 ? 4 + gap * index : 50;
+    const openY = scalePrice(bar.open, minPrice, maxPrice);
+    const closeY = scalePrice(bar.close, minPrice, maxPrice);
+    const highY = scalePrice(bar.high, minPrice, maxPrice);
+    const lowY = scalePrice(bar.low, minPrice, maxPrice);
+
+    return {
+      id: bar.id,
+      x,
+      rising: bar.close >= bar.open,
+      wickTop: highY,
+      wickBottom: lowY,
+      bodyX: x - candleWidth / 2,
+      bodyY: Math.min(openY, closeY),
+      bodyHeight: Math.max(Math.abs(closeY - openY), 1.4),
+      hitBoxX: x - hitBoxWidth / 2,
+      hitBoxWidth
+    };
+  });
+
+  const volumeBars = displayBars.map((bar, index) => {
+    const x = displayBars.length > 1 ? 4 + gap * index : 50;
+    const height = Math.max(bar.volume / maxVolume * 16, 1.5);
+    return {
+      id: `volume-${bar.id}`,
+      x: x - candleWidth / 2,
+      y: 96 - height,
+      width: candleWidth,
+      height,
+      rising: bar.close >= bar.open
+    };
+  });
+
+  const ma120Segments = buildLineSegments(
+    displayBars.map((bar, index) => {
+      const value = overlays.ma120?.[index];
+      if (!Number.isFinite(value)) {
+        return null;
+      }
+
+      const x = displayBars.length > 1 ? 4 + gap * index : 50;
+      return { x, y: scalePrice(value, minPrice, maxPrice) };
+    })
+  );
+
+  const ma200Segments = buildLineSegments(
+    displayBars.map((bar, index) => {
+      const value = overlays.ma200?.[index];
+      if (!Number.isFinite(value)) {
+        return null;
+      }
+
+      const x = displayBars.length > 1 ? 4 + gap * index : 50;
+      return { x, y: scalePrice(value, minPrice, maxPrice) };
+    })
+  );
+
+  return {
+    candles,
+    volumeBars,
+    ma120Segments,
+    ma200Segments,
+    xPositions: candles.map((candle) => candle.x),
+    scaleMeta: { minPrice, maxPrice }
+  };
+}
+
+function buildMaNote(timeframe, dailyBarCount) {
+  if (timeframe === '1d') {
+    return dailyBarCount >= 200
+      ? 'MA120 / MA200 代表长期日线趋势。'
+      : `当前仅收录 ${dailyBarCount} 个交易日，长期均线先按已收录日线样本滚动展示。`;
+  }
+
+  return '当前是短周期视图，MA120 / MA200 按当前周期滚动计算，1d 视图更适合观察长期趋势。';
+}
+
 export function HomeExperience({ links, inPagesDir = false }) {
   const accumulationState = readAccumulationState();
   const accumulation = buildStages(accumulationState);
@@ -126,18 +309,21 @@ export function HomeExperience({ links, inPagesDir = false }) {
   const dca = buildDcaProjection(dcaState);
   const nextBuyPrice = accumulation.stages[1]?.price ?? accumulationState.basePrice;
   const reserveRatio = planState.totalBudget > 0 ? plan.reserveCapital / planState.totalBudget * 100 : 0;
-  const savedDashboardState = readHomeDashboardState();
+  const [dashboardState] = useState(() => readHomeDashboardState());
 
   const [marketEntries, setMarketEntries] = useState([]);
   const [marketError, setMarketError] = useState('');
-  const [watchlistCodes, setWatchlistCodes] = useState(savedDashboardState.watchlistCodes);
-  const [selectedCode, setSelectedCode] = useState(savedDashboardState.selectedCode);
+  const [watchlistCodes, setWatchlistCodes] = useState(dashboardState.watchlistCodes);
+  const [selectedCode, setSelectedCode] = useState(dashboardState.selectedCode);
   const [pendingCode, setPendingCode] = useState('');
-  const [pulseData, setPulseData] = useState(null);
+  const [minuteSnapshot, setMinuteSnapshot] = useState(null);
+  const [dailySnapshots, setDailySnapshots] = useState([]);
   const [pulseError, setPulseError] = useState('');
   const [isLoadingPulse, setIsLoadingPulse] = useState(false);
   const [watchlistNotice, setWatchlistNotice] = useState('');
   const [watchlistNoticeTone, setWatchlistNoticeTone] = useState('slate');
+  const [timeframe, setTimeframe] = useState('1m');
+  const [activeBarId, setActiveBarId] = useState('');
   const importInputRef = useRef(null);
 
   useEffect(() => {
@@ -189,9 +375,10 @@ export function HomeExperience({ links, inPagesDir = false }) {
     }
   }, [availableCodes, defaultWatchlistCodes, marketEntries.length, selectedCode, watchlistCodes]);
 
-  const visibleWatchlistCodes = useMemo(() => {
-    return watchlistCodes.filter((code) => marketByCode.has(code));
-  }, [marketByCode, watchlistCodes]);
+  const visibleWatchlistCodes = useMemo(
+    () => watchlistCodes.filter((code) => marketByCode.has(code)),
+    [marketByCode, watchlistCodes]
+  );
 
   const watchlistItems = useMemo(
     () => visibleWatchlistCodes.map((code) => marketByCode.get(code)).filter(Boolean),
@@ -218,7 +405,7 @@ export function HomeExperience({ links, inPagesDir = false }) {
     if (!watchlistItems.some((item) => item.code === selectedCode)) {
       setSelectedCode(watchlistItems[0].code);
     }
-  }, [selectedCode, watchlistItems]);
+  }, [marketEntries.length, selectedCode, watchlistItems]);
 
   useEffect(() => {
     if (!marketEntries.length) {
@@ -235,7 +422,7 @@ export function HomeExperience({ links, inPagesDir = false }) {
     if (!addableEntries.some((entry) => entry.code === pendingCode)) {
       setPendingCode(addableEntries[0].code);
     }
-  }, [addableEntries, pendingCode]);
+  }, [addableEntries, marketEntries.length, pendingCode]);
 
   useEffect(() => {
     if (!marketEntries.length) {
@@ -252,7 +439,8 @@ export function HomeExperience({ links, inPagesDir = false }) {
 
   useEffect(() => {
     if (!selectedFund?.output_path) {
-      setPulseData(null);
+      setMinuteSnapshot(null);
+      setDailySnapshots([]);
       setPulseError('');
       setIsLoadingPulse(false);
       return;
@@ -261,22 +449,31 @@ export function HomeExperience({ links, inPagesDir = false }) {
     let cancelled = false;
 
     setIsLoadingPulse(true);
-    loadNasdaqMinuteSnapshot(selectedFund, { inPagesDir })
-      .then((payload) => {
+    Promise.allSettled([
+      loadNasdaqMinuteSnapshot(selectedFund, { inPagesDir }),
+      loadNasdaqDailySnapshots(selectedFund.code, { inPagesDir })
+    ])
+      .then(([minuteResult, dailyResult]) => {
         if (cancelled) {
           return;
         }
 
-        setPulseData(payload);
-        setPulseError('');
-      })
-      .catch((error) => {
-        if (cancelled) {
-          return;
+        if (minuteResult.status === 'fulfilled') {
+          setMinuteSnapshot(minuteResult.value);
+          setPulseError('');
+        } else {
+          setMinuteSnapshot(null);
+          setPulseError(minuteResult.reason instanceof Error ? minuteResult.reason.message : '分钟线数据加载失败');
         }
 
-        setPulseData(null);
-        setPulseError(error instanceof Error ? error.message : '分钟线数据加载失败');
+        if (dailyResult.status === 'fulfilled') {
+          setDailySnapshots(dailyResult.value);
+        } else {
+          setDailySnapshots([]);
+          if (minuteResult.status !== 'fulfilled') {
+            setPulseError(dailyResult.reason instanceof Error ? dailyResult.reason.message : '历史快照加载失败');
+          }
+        }
       })
       .finally(() => {
         if (!cancelled) {
@@ -289,44 +486,88 @@ export function HomeExperience({ links, inPagesDir = false }) {
     };
   }, [inPagesDir, selectedFund]);
 
+  const normalizedMinuteBars = useMemo(
+    () => normalizeMinuteBars(minuteSnapshot?.bars || []),
+    [minuteSnapshot]
+  );
+  const fullBarsByTimeframe = useMemo(() => ({
+    '1m': normalizedMinuteBars,
+    '15m': aggregateMinuteBars(normalizedMinuteBars, 15),
+    '1d': buildDailyBarsFromSnapshots(dailySnapshots)
+  }), [dailySnapshots, normalizedMinuteBars]);
+
+  const fullBars = fullBarsByTimeframe[timeframe] || [];
+  const displayBars = useMemo(
+    () => limitBarsForChart(fullBars, MAX_CHART_BARS[timeframe] || 64),
+    [fullBars, timeframe]
+  );
+  const ma120Values = useMemo(
+    () => buildMappedMovingAverage(displayBars, fullBars, 120, { allowPartial: fullBars.length < 120 }),
+    [displayBars, fullBars]
+  );
+  const ma200Values = useMemo(
+    () => buildMappedMovingAverage(displayBars, fullBars, 200, { allowPartial: fullBars.length < 200 }),
+    [displayBars, fullBars]
+  );
+  const chartGeometry = useMemo(
+    () => buildChartGeometry(displayBars, { ma120: ma120Values, ma200: ma200Values }),
+    [displayBars, ma120Values, ma200Values]
+  );
+
+  useEffect(() => {
+    if (!displayBars.length) {
+      if (activeBarId) {
+        setActiveBarId('');
+      }
+      return;
+    }
+
+    if (!displayBars.some((bar) => bar.id === activeBarId)) {
+      setActiveBarId(displayBars[displayBars.length - 1].id);
+    }
+  }, [activeBarId, displayBars]);
+
+  const activeBarIndex = useMemo(
+    () => displayBars.findIndex((bar) => bar.id === activeBarId),
+    [activeBarId, displayBars]
+  );
+  const resolvedActiveBarIndex = activeBarIndex >= 0 ? activeBarIndex : Math.max(displayBars.length - 1, 0);
+  const activeBar = displayBars[resolvedActiveBarIndex] || null;
+  const activeMa120 = resolvedActiveBarIndex >= 0 ? ma120Values[resolvedActiveBarIndex] : null;
+  const activeMa200 = resolvedActiveBarIndex >= 0 ? ma200Values[resolvedActiveBarIndex] : null;
+  const activeCandle = chartGeometry.candles[resolvedActiveBarIndex] || null;
+  const activeCloseY = activeBar && chartGeometry.scaleMeta
+    ? scalePrice(activeBar.close, chartGeometry.scaleMeta.minPrice, chartGeometry.scaleMeta.maxPrice)
+    : null;
+
   const pricePulse = useMemo(() => {
-    const rawBars = Array.isArray(pulseData?.bars) ? pulseData.bars : [];
-    if (!selectedFund || !rawBars.length) {
+    if (!selectedFund || !displayBars.length) {
       return null;
     }
 
-    const bars = rawBars.filter((bar) => Number.isFinite(Number(bar.close)));
-    if (!bars.length) {
-      return null;
-    }
-
-    const firstBar = bars[0];
-    const lastBar = bars[bars.length - 1];
-    const latestPrice = Number(selectedFund.current_price) || Number(lastBar.close) || 0;
-    const openPrice = Number(firstBar.open) || Number(firstBar.close) || latestPrice;
-    const highPrice = Math.max(...bars.map((bar) => Number(bar.high) || Number(bar.close) || 0), latestPrice);
-    const lowPrice = Math.min(...bars.map((bar) => Number(bar.low) || Number(bar.close) || latestPrice), latestPrice);
-    const avgPrice = Number(lastBar.avg_price) || latestPrice;
-    const totalAmount = bars.reduce((sum, bar) => sum + (Number(bar.amount) || 0), 0);
-    const totalVolume = bars.reduce((sum, bar) => sum + (Number(bar.volume) || 0), 0);
+    const latestBar = activeBar || displayBars[displayBars.length - 1];
+    const firstBar = displayBars[0];
+    const latestPrice = Number(selectedFund.current_price) || latestBar.close || 0;
+    const openPrice = firstBar.open || latestPrice;
+    const highPrice = Math.max(...displayBars.map((bar) => bar.high), latestPrice);
+    const lowPrice = Math.min(...displayBars.map((bar) => bar.low), latestPrice);
     const changePct = openPrice > 0 ? (latestPrice - openPrice) / openPrice * 100 : 0;
-    const sampledBars = sampleBars(bars);
-    const chart = buildChartGeometry(sampledBars);
+    const totalAmount = displayBars.reduce((sum, bar) => sum + bar.amount, 0);
+    const totalVolume = displayBars.reduce((sum, bar) => sum + bar.volume, 0);
 
     return {
+      bars: displayBars,
       latestPrice,
       openPrice,
       highPrice,
       lowPrice,
-      avgPrice,
       totalAmount,
       totalVolume,
       changePct,
       asOf: formatPriceAsOf(selectedFund),
-      chart,
-      lastTimestamp: String(lastBar.datetime || '').trim().slice(11, 16)
+      maNote: buildMaNote(timeframe, fullBarsByTimeframe['1d'].length)
     };
-  }, [pulseData, selectedFund]);
+  }, [activeBar, displayBars, fullBarsByTimeframe, selectedFund, timeframe]);
 
   function addWatchlistItem() {
     if (!pendingCode || visibleWatchlistCodes.includes(pendingCode)) {
@@ -450,40 +691,42 @@ export function HomeExperience({ links, inPagesDir = false }) {
                   />
                 </div>
                 <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
-                <div className="min-w-[220px]">
-                  <SelectField
-                    disabled={!addableEntries.length}
-                    options={addableEntries.map((entry) => ({
-                      label: `${entry.code} · ${entry.name}`,
-                      value: entry.code
-                    }))}
-                    value={pendingCode}
-                    onChange={(event) => setPendingCode(event.target.value)}
-                  />
-                </div>
-                <button
-                  className={primaryButtonClass}
-                  disabled={!pendingCode || !addableEntries.length}
-                  type="button"
-                  onClick={addWatchlistItem}
-                >
-                  <Plus className="h-4 w-4" />
-                  新增自选
-                </button>
+                  <div className="min-w-[220px]">
+                    <SelectField
+                      disabled={!addableEntries.length}
+                      options={addableEntries.map((entry) => ({
+                        label: `${entry.code} · ${entry.name}`,
+                        value: entry.code
+                      }))}
+                      value={pendingCode}
+                      onChange={(event) => setPendingCode(event.target.value)}
+                    />
+                  </div>
+                  <button
+                    className={primaryButtonClass}
+                    disabled={!pendingCode || !addableEntries.length}
+                    type="button"
+                    onClick={addWatchlistItem}
+                  >
+                    <Plus className="h-4 w-4" />
+                    新增自选
+                  </button>
                 </div>
               </div>
             }
           />
 
           {watchlistNotice ? (
-            <div className={cx(
-              'mt-5 rounded-2xl px-4 py-3 text-sm',
-              watchlistNoticeTone === 'emerald'
-                ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                : watchlistNoticeTone === 'amber'
-                  ? 'border border-amber-200 bg-amber-50 text-amber-700'
-                  : 'border border-slate-200 bg-slate-50 text-slate-600'
-            )}>
+            <div
+              className={cx(
+                'mt-5 rounded-2xl px-4 py-3 text-sm',
+                watchlistNoticeTone === 'emerald'
+                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : watchlistNoticeTone === 'amber'
+                    ? 'border border-amber-200 bg-amber-50 text-amber-700'
+                    : 'border border-slate-200 bg-slate-50 text-slate-600'
+              )}
+            >
               {watchlistNotice}
             </div>
           ) : null}
@@ -564,92 +807,169 @@ export function HomeExperience({ links, inPagesDir = false }) {
             <SectionHeading
               eyebrow="Price Pulse"
               title="价格走势与基金脉冲"
-              description="卡片指标和图表都直接读取 data 下对应基金的分钟线与现价数据，不再使用写死示意图。"
+              description="切换不同时间粒度查看专业 K 线、成交量和 MA120 / MA200 参考。图表可直接点选单根蜡烛，底部会同步更新 OHLC 数据。"
               action={selectedFund ? <Pill tone="indigo">{selectedFund.code}</Pill> : null}
             />
 
             {selectedFund && pricePulse ? (
-              <div className="mt-6 rounded-[24px] border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-indigo-50 p-5">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="rounded-2xl border border-slate-200 bg-white/90 p-4">
-                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">最新价</div>
-                    <div className="mt-2 text-xl font-bold text-slate-900">{formatFundPrice(pricePulse.latestPrice)}</div>
-                    <div className="mt-1 text-sm text-slate-500">{selectedFund.name}</div>
-                  </div>
-                  <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
-                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-500">日内涨跌</div>
-                    <div className="mt-2 text-xl font-bold text-indigo-700">{formatPercent(pricePulse.changePct, 2, true)}</div>
-                    <div className="mt-1 text-sm text-indigo-600">开盘 {formatFundPrice(pricePulse.openPrice)}</div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white/90 p-4">
-                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">成交额</div>
-                    <div className="mt-2 text-xl font-bold text-slate-900">¥ {formatCompactNumber(pricePulse.totalAmount)}</div>
-                    <div className="mt-1 text-sm text-slate-500">成交量 {formatCompactNumber(pricePulse.totalVolume)}</div>
-                  </div>
-                </div>
+              <div className="mt-6 space-y-4 rounded-[28px] border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-indigo-50 p-5">
+                <div className="flex flex-col gap-4 rounded-[24px] border border-slate-200 bg-white/95 p-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-1">
+                      <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">K-Line Monitor</div>
+                      <div className="text-2xl font-extrabold text-slate-900">{formatFundPrice(pricePulse.latestPrice)}</div>
+                      <div className={cx('text-sm font-semibold', pricePulse.changePct >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                        {formatPercent(pricePulse.changePct, 2, true)}
+                      </div>
+                    </div>
 
-                <div className="relative mt-6 h-72 overflow-hidden rounded-[24px] border border-slate-200 bg-white">
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.16),_transparent_36%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.1),_transparent_30%)]" />
-                  <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
-                    {pricePulse.chart.volumeBars.map((bar) => (
-                      <rect
-                        key={bar.id}
-                        fill={bar.rising ? 'rgba(16,185,129,0.16)' : 'rgba(244,63,94,0.16)'}
-                        height={bar.height}
-                        width={bar.width}
-                        x={bar.x}
-                        y={bar.y}
-                      />
-                    ))}
-                    {pricePulse.chart.candles.map((candle) => (
-                      <g key={candle.id}>
-                        <line
-                          stroke={candle.rising ? '#10b981' : '#f43f5e'}
-                          strokeWidth="0.7"
-                          x1={candle.wickX}
-                          x2={candle.wickX}
-                          y1={candle.wickTop}
-                          y2={candle.wickBottom}
-                        />
+                    <div className="flex flex-col gap-3 lg:items-end">
+                      <div className="flex flex-wrap items-center gap-2 rounded-full bg-slate-100 p-1">
+                        {TIMEFRAME_OPTIONS.map((option) => (
+                          <button
+                            key={option.key}
+                            className={cx(
+                              'rounded-full px-3 py-1.5 text-xs font-semibold transition-colors',
+                              timeframe === option.key
+                                ? 'bg-white text-slate-900 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-700'
+                            )}
+                            type="button"
+                            onClick={() => setTimeframe(option.key)}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="grid gap-2 text-right sm:grid-cols-3 lg:min-w-[360px]">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">成交额</div>
+                          <div className="mt-1 text-sm font-semibold text-slate-900">¥ {formatCompactNumber(pricePulse.totalAmount)}</div>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">MA120</div>
+                          <div className="mt-1 text-sm font-semibold text-violet-600">{formatRawNumber(activeMa120)}</div>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">MA200</div>
+                          <div className="mt-1 text-sm font-semibold text-amber-600">{formatRawNumber(activeMa200)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="font-semibold text-slate-800">{activeBar?.longLabel || selectedFund.name}</span>
+                      <span>开 {formatRawNumber(activeBar?.open)}</span>
+                      <span>高 {formatRawNumber(activeBar?.high)}</span>
+                      <span>低 {formatRawNumber(activeBar?.low)}</span>
+                      <span>收 {formatRawNumber(activeBar?.close)}</span>
+                      <span>MA120 {formatRawNumber(activeMa120)}</span>
+                      <span>MA200 {formatRawNumber(activeMa200)}</span>
+                    </div>
+                  </div>
+
+                  <div className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-white">
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.12),_transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.08),_transparent_32%)]" />
+                    <svg className="relative h-[420px] w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
+                      <line stroke="rgba(148,163,184,0.16)" strokeDasharray="1.5 2.5" strokeWidth="0.4" x1="4" x2="96" y1="16" y2="16" />
+                      <line stroke="rgba(148,163,184,0.16)" strokeDasharray="1.5 2.5" strokeWidth="0.4" x1="4" x2="96" y1="32" y2="32" />
+                      <line stroke="rgba(148,163,184,0.16)" strokeDasharray="1.5 2.5" strokeWidth="0.4" x1="4" x2="96" y1="48" y2="48" />
+                      <line stroke="rgba(148,163,184,0.16)" strokeDasharray="1.5 2.5" strokeWidth="0.4" x1="4" x2="96" y1="64" y2="64" />
+                      <line stroke="rgba(148,163,184,0.2)" strokeWidth="0.5" x1="4" x2="96" y1="79" y2="79" />
+
+                      {chartGeometry.volumeBars.map((bar) => (
                         <rect
-                          fill={candle.rising ? '#10b981' : '#f43f5e'}
-                          height={candle.bodyHeight}
-                          rx="0.5"
-                          width={Math.max(candle.bodyHeight > 1.3 ? 1.8 : 1.2, 1.2)}
-                          x={candle.bodyX}
-                          y={candle.bodyY}
+                          key={bar.id}
+                          fill={bar.rising ? 'rgba(16,185,129,0.22)' : 'rgba(244,63,94,0.18)'}
+                          height={bar.height}
+                          rx="0.25"
+                          width={Math.max(bar.width, 1.2)}
+                          x={bar.x}
+                          y={bar.y}
                         />
-                      </g>
-                    ))}
-                    <polyline
-                      fill="none"
-                      points={pricePulse.chart.closePoints}
-                      stroke="#312e81"
-                      strokeWidth="1.6"
-                      strokeLinejoin="round"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <div className="absolute left-4 top-4 rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white shadow-lg">
-                    {selectedFund.code} · {pricePulse.lastTimestamp || '分时'}
-                  </div>
-                  <div className="absolute right-4 top-4 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
-                    {pricePulse.asOf || pulseData?.date || ''}
-                  </div>
-                </div>
+                      ))}
 
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">日内最高</div>
-                    <div className="mt-2 text-lg font-bold text-slate-900">{formatFundPrice(pricePulse.highPrice)}</div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">日内最低</div>
-                    <div className="mt-2 text-lg font-bold text-slate-900">{formatFundPrice(pricePulse.lowPrice)}</div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">均价参考</div>
-                    <div className="mt-2 text-lg font-bold text-slate-900">{formatFundPrice(pricePulse.avgPrice)}</div>
+                      {chartGeometry.ma120Segments.map((segment, index) => (
+                        <polyline
+                          key={`ma120-${index}`}
+                          fill="none"
+                          points={segment}
+                          stroke="#7c3aed"
+                          strokeWidth={timeframe === '1d' ? '1.6' : '1.2'}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      ))}
+
+                      {chartGeometry.ma200Segments.map((segment, index) => (
+                        <polyline
+                          key={`ma200-${index}`}
+                          fill="none"
+                          points={segment}
+                          stroke="#f59e0b"
+                          strokeWidth={timeframe === '1d' ? '1.6' : '1.2'}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      ))}
+
+                      {chartGeometry.candles.map((candle) => (
+                        <g key={candle.id}>
+                          <line
+                            stroke={candle.rising ? '#10b981' : '#f43f5e'}
+                            strokeWidth="0.7"
+                            x1={candle.x}
+                            x2={candle.x}
+                            y1={candle.wickTop}
+                            y2={candle.wickBottom}
+                          />
+                          <rect
+                            fill={candle.rising ? '#10b981' : '#f43f5e'}
+                            height={candle.bodyHeight}
+                            rx="0.35"
+                            width={Math.max(candle.hitBoxWidth > 5 ? 1.9 : 1.4, 1.2)}
+                            x={candle.bodyX}
+                            y={candle.bodyY}
+                          />
+                          <rect
+                            fill="transparent"
+                            height="100"
+                            width={candle.hitBoxWidth}
+                            x={candle.hitBoxX}
+                            y="0"
+                            onClick={() => setActiveBarId(candle.id)}
+                          />
+                        </g>
+                      ))}
+
+                      {activeCandle && Number.isFinite(activeCloseY) ? (
+                        <g>
+                          <line stroke="rgba(15,23,42,0.28)" strokeDasharray="1.8 2.2" strokeWidth="0.5" x1={activeCandle.x} x2={activeCandle.x} y1="6" y2="96" />
+                          <line stroke="rgba(15,23,42,0.18)" strokeDasharray="1.8 2.2" strokeWidth="0.5" x1="4" x2="96" y1={activeCloseY} y2={activeCloseY} />
+                          <circle cx={activeCandle.x} cy={activeCloseY} fill="#312e81" r="1.2" />
+                        </g>
+                      ) : null}
+                    </svg>
+
+                    <div className="pointer-events-none absolute left-4 top-4 flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+                      <span className="rounded-full bg-slate-900 px-3 py-1 text-white">{selectedFund.code}</span>
+                      <span className="rounded-full bg-violet-50 px-3 py-1 text-violet-700">MA120</span>
+                      <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700">MA200</span>
+                    </div>
+                    <div className="pointer-events-none absolute right-4 top-4 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
+                      {pricePulse.asOf || minuteSnapshot?.date || ''}
+                    </div>
+                    <div className="border-t border-slate-200 bg-slate-50/90 px-4 py-3 text-xs text-slate-500">
+                      <div className="flex flex-wrap items-center gap-4">
+                        <span>{activeBar?.longLabel || '--'}</span>
+                        <span>成交量 {formatCompactNumber(activeBar?.volume)}</span>
+                        <span>成交额 ¥ {formatCompactNumber(activeBar?.amount)}</span>
+                        <span>{pricePulse.maNote}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -658,7 +978,7 @@ export function HomeExperience({ links, inPagesDir = false }) {
                 {pulseError || marketError
                   ? `价格脉冲加载失败：${pulseError || marketError}`
                   : isLoadingPulse
-                    ? '正在加载所选基金的分钟线数据...'
+                    ? '正在加载所选基金的 K 线和历史快照数据...'
                     : '请选择一个自选基金后查看 Price Pulse。'}
               </div>
             )}
@@ -719,76 +1039,12 @@ export function HomeExperience({ links, inPagesDir = false }) {
               <ul className="mt-5 space-y-3 text-sm leading-6 text-slate-600">
                 <li>首笔建仓使用 {formatCurrency(accumulation.stages[0]?.price ?? accumulationState.basePrice)} 作为基准价。</li>
                 <li>下一层计划买入价为 {formatCurrency(nextBuyPrice)}，触发后会自动重算平均成本。</li>
+                <li>当前预留资金占总预算 {formatPercent(reserveRatio, 1)}，保留现金缓冲有利于承接二层和三层回撤。</li>
                 <li>定投计划当前总投入 {formatCurrency(dca.totalInvestment)}，执行频率为 {dcaState.frequency}。</li>
               </ul>
             </Card>
           </div>
         </div>
-
-        <Card>
-          <SectionHeading eyebrow="Playbooks" title="历史计划与调试入口" />
-          <div className="mt-5 space-y-3">
-            {HISTORY_PLANS.map((item) => (
-              <div key={item.name} className={cx('rounded-2xl border px-4 py-4', item.active ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-slate-50')}>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <div className="font-semibold">{item.name}</div>
-                    <div className={cx('mt-1 text-sm', item.active ? 'text-slate-300' : 'text-slate-500')}>{item.note}</div>
-                  </div>
-                  <LayoutGrid className={cx('h-5 w-5', item.active ? 'text-slate-300' : 'text-slate-400')} />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                <Wallet className="h-4 w-4 text-slate-400" />
-                预留现金
-              </div>
-              <div className="mt-2 text-xl font-bold text-slate-900">{formatCurrency(plan.reserveCapital)}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                <TrendingUp className="h-4 w-4 text-slate-400" />
-                定投总投入
-              </div>
-              <div className="mt-2 text-xl font-bold text-slate-900">{formatCurrency(dca.totalInvestment)}</div>
-            </div>
-          </div>
-
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <a className={secondaryButtonClass} href={links.catalog}>打开目录</a>
-            <a className={primaryButtonClass} href={links.history}>
-              查看历史记录
-              <ArrowRight className="h-4 w-4" />
-            </a>
-            <button className={subtleButtonClass} type="button" onClick={restoreDefaultWatchlist}>
-              恢复默认自选
-            </button>
-          </div>
-
-          <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm leading-6 text-emerald-700">
-            <div className="flex items-center gap-2 font-semibold">
-              <Shield className="h-4 w-4" />
-              资金纪律
-            </div>
-            <p className="mt-2">
-              当前预留资金占总预算 {formatPercent(reserveRatio, 1)}，这让你在阶段二和阶段三出现快速下探时仍有足够现金缓冲。
-            </p>
-          </div>
-
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-            <div className="flex items-center gap-2 font-semibold text-slate-700">
-              <LineChart className="h-4 w-4 text-slate-400" />
-              趋势提示
-            </div>
-            <p className="mt-2">
-              如果 QQQ 触及 {formatCurrency(nextBuyPrice)} 附近，可以优先回到“加仓配置”页确认第二层权重与总现金使用节奏。
-            </p>
-          </div>
-        </Card>
       </div>
     </PageShell>
   );
