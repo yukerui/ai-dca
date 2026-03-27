@@ -290,7 +290,7 @@ export function FundSwitchExperience({ links, inPagesDir }) {
   );
   const statusMeta = getStatusMeta(ocrState.status);
   const advantageMeta = getAdvantageTone(summary.switchAdvantage);
-  const recognizedCount = summary.recordCount;
+  const recognizedCount = summary.validRecordCount;
 
   useEffect(() => {
     persistFundSwitchState({ ...state, comparison: summary.comparison }, summary);

@@ -10,44 +10,32 @@ import {
 } from './fundSwitchCore.js';
 
 const FUND_SWITCH_KEY = 'aiDcaFundSwitchState';
+const LEGACY_SAMPLE_FILE_NAME = 'Screenshot_20231024_09.png';
 
 export { FUND_SWITCH_STRATEGIES };
 
-export const defaultFundSwitchState = {
-  fileName: 'Screenshot_20231024_09.png',
-  recognizedRecords: 4,
-  feePerTrade: 0,
-  comparison: {
+function createBlankComparison() {
+  return {
     strategy: 'direct',
-    sourcePositions: [{ code: '159660', shares: 2600 }],
-    targetPositions: [{ code: '513100', shares: 2900 }],
-    sourceCode: '159660',
-    sourceSellShares: 2600,
-    sourceCurrentPrice: 1.863,
-    targetCode: '513100',
-    targetBuyShares: 2900,
-    targetCurrentPrice: 1.729,
-    switchCost: 4869.1,
-    extraCash: 142.3,
-    feeTradeCount: 2,
+    sourcePositions: [],
+    targetPositions: [],
+    sourceCode: '',
+    sourceSellShares: 0,
+    sourceCurrentPrice: 0,
+    targetCode: '',
+    targetBuyShares: 0,
+    targetCurrentPrice: 0,
+    switchCost: 0,
+    extraCash: 0,
+    feeTradeCount: 0,
     priceOverrides: {}
-  },
-  rows: [
-    { id: 'switch-1', date: '2023-10-24', code: '000651', type: '卖出', buyPrice: 0, sellPrice: 1.245, shares: 12500 },
-    { id: 'switch-2', date: '2023-10-25', code: '001230', type: '买入', buyPrice: 3.8821, sellPrice: 0, shares: 4010.5 },
-    { id: 'switch-3', date: '2023-11-02', code: '510300', type: '买入', buyPrice: 0.9982, sellPrice: 0, shares: 25000 },
-    { id: 'switch-4', date: '2023-11-15', code: '161725', type: '卖出', buyPrice: 0, sellPrice: 1.0234, shares: 8900 }
-  ]
-};
-
-function toPositiveNumber(value) {
-  return Math.max(Number(value) || 0, 0);
+  };
 }
 
-export function createEmptyFundSwitchRow() {
+function createBlankRow(id = `switch-${Date.now()}`) {
   return sanitizeFundSwitchRows([
     {
-      id: `switch-${Date.now()}`,
+      id,
       date: '',
       code: '',
       type: '买入',
@@ -57,6 +45,22 @@ export function createEmptyFundSwitchRow() {
       amount: 0
     }
   ])[0];
+}
+
+export const defaultFundSwitchState = {
+  fileName: '',
+  recognizedRecords: 0,
+  feePerTrade: 0,
+  comparison: createBlankComparison(),
+  rows: [createBlankRow('switch-empty-1')]
+};
+
+function toPositiveNumber(value) {
+  return Math.max(Number(value) || 0, 0);
+}
+
+export function createEmptyFundSwitchRow() {
+  return createBlankRow();
 }
 
 export function deriveFundSwitchComparison(rows, comparison = {}, strategyOverride) {
@@ -118,6 +122,21 @@ export function buildFundSwitchSummary(state, { getCurrentPrice } = {}) {
   };
 }
 
+function isLegacySeededSample(saved) {
+  if (!saved || typeof saved !== 'object') {
+    return false;
+  }
+
+  const rows = Array.isArray(saved.rows) ? saved.rows : [];
+  return saved.fileName === LEGACY_SAMPLE_FILE_NAME
+    && Math.max(Number(saved.recognizedRecords) || 0, 0) === 4
+    && rows.length === 4
+    && rows[0]?.code === '000651'
+    && rows[1]?.code === '001230'
+    && rows[2]?.code === '510300'
+    && rows[3]?.code === '161725';
+}
+
 export function readFundSwitchState() {
   if (typeof window === 'undefined') {
     return defaultFundSwitchState;
@@ -125,16 +144,17 @@ export function readFundSwitchState() {
 
   try {
     const saved = JSON.parse(window.localStorage.getItem(FUND_SWITCH_KEY) || 'null');
-    if (!saved) {
+    if (!saved || isLegacySeededSample(saved)) {
       return defaultFundSwitchState;
     }
 
     const savedRows = sanitizeFundSwitchRows(Array.isArray(saved.rows) && saved.rows.length ? saved.rows : defaultFundSwitchState.rows);
+    const validSavedRows = sanitizeFundSwitchRows(savedRows, { filterInvalid: true });
     return {
-      fileName: saved.fileName || defaultFundSwitchState.fileName,
-      recognizedRecords: Math.max(Number(saved.recognizedRecords) || savedRows.length || defaultFundSwitchState.recognizedRecords, 0),
+      fileName: saved.fileName || '',
+      recognizedRecords: Math.max(Number(saved.recognizedRecords) || validSavedRows.length || 0, 0),
       feePerTrade: round(toPositiveNumber(saved.feePerTrade), 2),
-      comparison: sanitizeFundSwitchComparison(saved.comparison),
+      comparison: sanitizeFundSwitchComparison(saved.comparison || createBlankComparison()),
       rows: savedRows.length ? savedRows : [createEmptyFundSwitchRow()]
     };
   } catch (_error) {
@@ -149,8 +169,8 @@ export function persistFundSwitchState(state, computed = buildFundSwitchSummary(
 
   const payload = {
     source: 'react-fund-switch',
-    fileName: state.fileName || defaultFundSwitchState.fileName,
-    recognizedRecords: Math.max(Number(state.recognizedRecords) || computed.recordCount, 0),
+    fileName: state.fileName || '',
+    recognizedRecords: Math.max(Number(state.recognizedRecords) || computed.validRecordCount, 0),
     feePerTrade: round(computed.feePerTrade, 2),
     processedAmount: round(computed.processedAmount, 2),
     sellAmount: round(computed.sellAmount, 2),
