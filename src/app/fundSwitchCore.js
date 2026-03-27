@@ -394,12 +394,13 @@ function createStandaloneLot(row, index) {
   return {
     id: `standalone-lot-${index + 1}`,
     code: row.code,
+    isSwitchDerived: false,
     remainingShares: row.shares,
     remainingCost: row.amount,
     directOrigins: new Map(originMap),
     tracedOrigins: new Map(originMap),
-    directExtraCash: row.amount,
-    tracedExtraCash: row.amount
+    directExtraCash: 0,
+    tracedExtraCash: 0
   };
 }
 
@@ -407,6 +408,7 @@ function createSwitchLot(event, inventorySnapshot, index) {
   return {
     id: `switch-lot-${index + 1}`,
     code: event.buy.code,
+    isSwitchDerived: true,
     remainingShares: event.buy.shares,
     remainingCost: event.buyAmount,
     directOrigins: createOriginMap(event.sell.code, event.sell.shares),
@@ -447,6 +449,7 @@ export function replayFundSwitchRows(rows = []) {
 }
 
 function buildPositionsFromLots(lots, strategy) {
+  const switchedLots = lots.filter((lot) => lot?.isSwitchDerived);
   const targetPositionMap = new Map();
   const sourcePositionMap = new Map();
   let switchCost = 0;
@@ -454,7 +457,7 @@ function buildPositionsFromLots(lots, strategy) {
   const originKey = strategy === 'trace' ? 'tracedOrigins' : 'directOrigins';
   const extraCashKey = strategy === 'trace' ? 'tracedExtraCash' : 'directExtraCash';
 
-  for (const lot of lots) {
+  for (const lot of switchedLots) {
     addPositionShare(targetPositionMap, lot.code, lot.remainingShares);
     mergeOriginMaps(sourcePositionMap, lot[originKey]);
     switchCost += lot.remainingCost;
