@@ -56,6 +56,17 @@ export const defaultFundSwitchState = {
   rows: [createBlankRow('switch-empty-1')]
 };
 
+export function createDefaultFundSwitchState() {
+  return {
+    fileName: '',
+    recognizedRecords: 0,
+    resultConfirmed: false,
+    feePerTrade: 0,
+    comparison: createBlankComparison(),
+    rows: [createBlankRow('switch-empty-1')]
+  };
+}
+
 function toPositiveNumber(value) {
   return Math.max(Number(value) || 0, 0);
 }

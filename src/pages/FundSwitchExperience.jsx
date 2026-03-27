@@ -16,6 +16,7 @@ import {
 import { formatCurrency } from '../app/accumulation.js';
 import {
   buildFundSwitchSummary,
+  createDefaultFundSwitchState,
   createEmptyFundSwitchRow,
   deriveFundSwitchComparison,
   FUND_SWITCH_STRATEGIES,
@@ -484,7 +485,7 @@ function TransactionEditorCard({ row, index, codeError, onUpdateRow, onRemoveRow
   );
 }
 
-function CompactOcrStatusCard({ fileName, statusMeta, recognizedCount, resultConfirmed, previewRows, hasMorePreviewRows, onReupload, onEdit }) {
+function CompactOcrStatusCard({ fileName, statusMeta, recognizedCount, resultConfirmed, previewRows, hasMorePreviewRows, onReupload, onEdit, onReset }) {
   return (
     <Card className="p-4 sm:p-5">
       <div className="flex flex-col gap-4">
@@ -543,6 +544,10 @@ function CompactOcrStatusCard({ fileName, statusMeta, recognizedCount, resultCon
             修改识别明细
           </button>
         </div>
+
+        <button className="text-sm font-semibold text-slate-500 transition-colors hover:text-slate-700" type="button" onClick={onReset}>
+          返回上传入口
+        </button>
       </div>
     </Card>
   );
@@ -573,7 +578,7 @@ function PendingResultCard({ issueSummary, onEdit }) {
   );
 }
 
-function EditingSummaryStrip({ strategy, recognizedCount, onExit }) {
+function EditingSummaryStrip({ strategy, recognizedCount, onExit, onReset }) {
   return (
     <Card className="p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -581,9 +586,14 @@ function EditingSummaryStrip({ strategy, recognizedCount, onExit }) {
           <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Edit Mode</div>
           <div className="mt-2 text-sm font-semibold text-slate-500">正在编辑识别明细，确认后会重新计算摘要结果。</div>
         </div>
-        <button className="inline-flex items-center gap-2 self-start rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-200 sm:self-auto" type="button" onClick={onExit}>
-          返回摘要
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button className="inline-flex items-center gap-2 self-start rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-200 sm:self-auto" type="button" onClick={onExit}>
+            返回摘要
+          </button>
+          <button className="text-sm font-semibold text-slate-500 transition-colors hover:text-slate-700" type="button" onClick={onReset}>
+            返回上传入口
+          </button>
+        </div>
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-3">
@@ -871,6 +881,14 @@ export function FundSwitchExperience({ links, inPagesDir }) {
     fileInputRef.current?.click();
   }
 
+  function resetToUploadEntry() {
+    setState(createDefaultFundSwitchState());
+    setOcrState(createOcrState());
+    setConfirmError('');
+    setIsEditingDetails(false);
+    setShowCalculationDetails(false);
+  }
+
   function openDetailEditor() {
     setIsEditingDetails(true);
     setShowCalculationDetails(false);
@@ -988,6 +1006,7 @@ export function FundSwitchExperience({ links, inPagesDir }) {
               strategy={summary.strategy}
               recognizedCount={recognizedCount}
               onExit={closeDetailEditor}
+              onReset={resetToUploadEntry}
             />
 
             <Card className="overflow-hidden p-0">
@@ -1112,6 +1131,7 @@ export function FundSwitchExperience({ links, inPagesDir }) {
                 hasMorePreviewRows={ocrPreview.hasMore}
                 onReupload={openFilePicker}
                 onEdit={openDetailEditor}
+                onReset={resetToUploadEntry}
               />
 
               <Card className="p-4 sm:p-6">
