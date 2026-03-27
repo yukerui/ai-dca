@@ -3,7 +3,7 @@ import { Download, Plus, Trash2, Upload } from 'lucide-react';
 import { formatCurrency, formatPercent, readAccumulationState } from '../app/accumulation.js';
 import { exportHomeDashboardState, importHomeDashboardState, normalizeHomeDashboardState, persistHomeDashboardState, readHomeDashboardState } from '../app/homeDashboard.js';
 import { formatPriceAsOf, loadLatestNasdaqPrices, loadNasdaqDailySeries, loadNasdaqMinuteSnapshot } from '../app/nasdaqPrices.js';
-import { buildPlan, readPlanState } from '../app/plan.js';
+import { readPlanState } from '../app/plan.js';
 import { Card, PageHero, PageShell, Pill, SectionHeading, SelectField, StatCard, cx, primaryButtonClass, secondaryButtonClass, subtleButtonClass } from '../components/experience-ui.jsx';
 
 const DEFAULT_WATCHLIST_CODES = ['513100', '159501', '159660'];
@@ -165,6 +165,101 @@ function buildMovingAverageValues(bars = [], period = 5, { allowPartial = false 
 function buildMappedMovingAverage(displayBars = [], fullBars = [], period = 5, { allowPartial = false } = {}) {
   const fullValues = buildMovingAverageValues(fullBars, period, { allowPartial });
   return displayBars.map((bar) => fullValues[bar.sourceIndex] ?? null);
+}
+
+function buildNasdaqStrategyPlan({
+  totalBudget = 0,
+  cashReservePct = 0,
+  ma120 = 0,
+  ma200 = 0,
+  fallbackPrice = 0
+} = {}) {
+  const triggerPrice = Number(ma120) > 0 ? Number(ma120) : Number(fallbackPrice) || 0;
+  const riskPrice = Number(ma200) > 0 ? Number(ma200) : 0;
+  const normalizedBudget = Math.max(Number(totalBudget) || 0, 0);
+  const normalizedReservePct = Math.max(Number(cashReservePct) || 0, 0);
+  const investableCapital = normalizedBudget * Math.max(0, 1 - normalizedReservePct / 100);
+  const reserveCapital = normalizedBudget - investableCapital;
+  const layerBlueprints = [
+    {
+      id: 'ma120-base',
+      label: 'MA120 基准',
+      signal: '靠近 MA120',
+      weight: 1,
+      price: triggerPrice,
+      drawdown: 0,
+      tone: 'violet'
+    },
+    {
+      id: 'ma120-minus-5',
+      label: 'MA120 - 5%',
+      signal: '低于 MA120 5%',
+      weight: 1.5,
+      price: triggerPrice > 0 ? triggerPrice * 0.95 : 0,
+      drawdown: 5,
+      tone: 'indigo'
+    },
+    {
+      id: 'ma120-minus-10',
+      label: 'MA120 - 10%',
+      signal: '低于 MA120 10%',
+      weight: 2,
+      price: triggerPrice > 0 ? triggerPrice * 0.9 : 0,
+      drawdown: 10,
+      tone: 'slate'
+    },
+    {
+      id: 'ma200-risk',
+      label: 'MA200 风控',
+      signal: riskPrice > 0 ? '跌破 MA200' : '深度防守',
+      weight: 2.5,
+      price: riskPrice > 0 ? riskPrice : (triggerPrice > 0 ? triggerPrice * 0.85 : 0),
+      drawdown: triggerPrice > 0 && riskPrice > 0
+        ? Math.max((1 - riskPrice / triggerPrice) * 100, 0)
+        : 15,
+      tone: 'amber'
+    }
+  ].filter((layer) => layer.price > 0);
+  const totalWeight = layerBlueprints.reduce((sum, layer) => sum + layer.weight, 0) || 1;
+  const layers = layerBlueprints.map((layer, index) => {
+    const amount = investableCapital * (layer.weight / totalWeight);
+    const shares = layer.price > 0 ? amount / layer.price : 0;
+
+    return {
+      ...layer,
+      amount,
+      shares,
+      order: index + 1
+    };
+  });
+  const totalAmount = layers.reduce((sum, layer) => sum + layer.amount, 0);
+  const totalShares = layers.reduce((sum, layer) => sum + layer.shares, 0);
+
+  return {
+    layers,
+    totalWeight,
+    investableCapital,
+    reserveCapital,
+    averageCost: totalShares > 0 ? totalAmount / totalShares : 0,
+    triggerPrice,
+    riskPrice
+  };
+}
+
+function resolveNextTriggerLayer(layers = [], currentPrice = 0) {
+  const sortedLayers = [...layers]
+    .filter((layer) => Number.isFinite(layer.price) && layer.price > 0)
+    .sort((left, right) => right.price - left.price);
+
+  if (!sortedLayers.length) {
+    return null;
+  }
+
+  if (!(Number(currentPrice) > 0)) {
+    return sortedLayers[0];
+  }
+
+  return sortedLayers.find((layer) => currentPrice > layer.price) || null;
 }
 
 function scalePrice(value, minValue, maxValue, top = 8, bottom = 74) {
@@ -502,28 +597,46 @@ export function HomeExperience({ links, inPagesDir = false }) {
     () => findLatestFiniteValue(dailyMa200Values),
     [dailyMa200Values]
   );
-  const strategyReferencePrice = useMemo(() => {
-    if (Number.isFinite(latestDailyMa200)) {
-      return latestDailyMa200;
-    }
-
+  const currentFundPrice = Number(selectedFund?.current_price) || 0;
+  const strategyTriggerPrice = useMemo(() => {
     if (Number.isFinite(latestDailyMa120)) {
       return latestDailyMa120;
     }
 
-    const currentPrice = Number(selectedFund?.current_price);
-    if (Number.isFinite(currentPrice) && currentPrice > 0) {
-      return currentPrice;
+    if (Number.isFinite(latestDailyMa200)) {
+      return latestDailyMa200;
+    }
+
+    if (Number.isFinite(currentFundPrice) && currentFundPrice > 0) {
+      return currentFundPrice;
     }
 
     return Number(planState.basePrice) || Number(accumulationState.basePrice) || 0;
-  }, [accumulationState.basePrice, latestDailyMa120, latestDailyMa200, planState.basePrice, selectedFund]);
-  const plan = useMemo(
-    () => buildPlan({ ...planState, basePrice: strategyReferencePrice }),
-    [planState, strategyReferencePrice]
+  }, [accumulationState.basePrice, currentFundPrice, latestDailyMa120, latestDailyMa200, planState.basePrice]);
+  const riskControlPrice = useMemo(() => {
+    if (Number.isFinite(latestDailyMa200)) {
+      return latestDailyMa200;
+    }
+
+    return strategyTriggerPrice > 0 ? strategyTriggerPrice * 0.85 : 0;
+  }, [latestDailyMa200, strategyTriggerPrice]);
+  const strategyPlan = useMemo(
+    () => buildNasdaqStrategyPlan({
+      totalBudget: planState.totalBudget,
+      cashReservePct: planState.cashReservePct,
+      ma120: strategyTriggerPrice,
+      ma200: riskControlPrice,
+      fallbackPrice: currentFundPrice || Number(accumulationState.basePrice) || Number(planState.basePrice) || 0
+    }),
+    [accumulationState.basePrice, currentFundPrice, planState.basePrice, planState.cashReservePct, planState.totalBudget, riskControlPrice, strategyTriggerPrice]
   );
-  const reserveRatio = planState.totalBudget > 0 ? plan.reserveCapital / planState.totalBudget * 100 : 0;
-  const nextBuyPrice = plan.layers[1]?.price ?? strategyReferencePrice;
+  const reserveRatio = planState.totalBudget > 0 ? strategyPlan.reserveCapital / planState.totalBudget * 100 : 0;
+  const nextTriggerLayer = useMemo(
+    () => resolveNextTriggerLayer(strategyPlan.layers, currentFundPrice),
+    [currentFundPrice, strategyPlan.layers]
+  );
+  const nextBuyPrice = nextTriggerLayer?.price ?? strategyTriggerPrice;
+  const isBelowRiskControl = currentFundPrice > 0 && riskControlPrice > 0 && currentFundPrice < riskControlPrice;
 
   const fullBars = fullBarsByTimeframe[timeframe] || [];
   const displayBars = useMemo(
@@ -679,7 +792,7 @@ export function HomeExperience({ links, inPagesDir = false }) {
         title="QQQ 建仓策略总览"
         badges={[
           <Pill key="status" tone="indigo">运行中</Pill>,
-          <Pill key="layers" tone="slate">{plan.layers.length} 层建仓</Pill>
+          <Pill key="layers" tone="slate">{strategyPlan.layers.length} 层建仓</Pill>
         ]}
         actions={
           <>
@@ -825,10 +938,10 @@ export function HomeExperience({ links, inPagesDir = false }) {
         </Card>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard accent="indigo" eyebrow="Portfolio Budget" value={formatCurrency(plan.investableCapital)} note="当前策略可执行预算" progress={Math.max(100 - reserveRatio, 0)} />
-          <StatCard eyebrow="Reserve Cash" value={formatCurrency(plan.reserveCapital)} note={`${formatPercent(reserveRatio, 1)} 作为流动性缓冲`} />
-          <StatCard eyebrow="Next Trigger" value={formatCurrency(nextBuyPrice)} note="下一层计划买入价位" />
-          <StatCard accent="emerald" eyebrow="Average Cost" value={formatCurrency(plan.averageCost)} note="按 MA200 基准重算的预估平均成本" />
+          <StatCard accent="indigo" eyebrow="Portfolio Budget" value={formatCurrency(strategyPlan.investableCapital)} note="按 MA120 主触发策略分配的预算" progress={Math.max(100 - reserveRatio, 0)} />
+          <StatCard eyebrow="Reserve Cash" value={formatCurrency(strategyPlan.reserveCapital)} note={isBelowRiskControl ? '价格已跌破 MA200，进入防守区。' : `${formatPercent(reserveRatio, 1)} 作为 MA200 防守缓冲`} />
+          <StatCard eyebrow="Next Trigger" value={formatFundPrice(nextBuyPrice)} note={nextTriggerLayer ? nextTriggerLayer.signal : '当前已进入最深防守区'} />
+          <StatCard accent="emerald" eyebrow="Average Cost" value={formatFundPrice(strategyPlan.averageCost)} note="按 MA120 触发层级与 MA200 风控重算" />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.75fr)_minmax(320px,0.95fr)]">
@@ -1020,8 +1133,10 @@ export function HomeExperience({ links, inPagesDir = false }) {
                 title="建仓计划详情"
                 action={
                   <div className="flex flex-wrap items-center gap-2">
-                    <Pill tone="amber">MA200 基准</Pill>
-                    <Pill tone="slate">{formatCurrency(strategyReferencePrice)}</Pill>
+                    <Pill tone="violet">MA120 触发</Pill>
+                    <Pill tone="slate">{formatFundPrice(strategyTriggerPrice)}</Pill>
+                    <Pill tone="amber">MA200 风控</Pill>
+                    <Pill tone="slate">{formatFundPrice(riskControlPrice)}</Pill>
                   </div>
                 }
               />
@@ -1030,17 +1145,19 @@ export function HomeExperience({ links, inPagesDir = false }) {
                   <thead className="border-b border-slate-200 bg-slate-50/80 text-xs uppercase text-slate-500">
                     <tr>
                       <th className="px-4 py-3 font-semibold">批次</th>
+                      <th className="px-4 py-3 font-semibold">信号</th>
                       <th className="px-4 py-3 font-semibold">价格</th>
                       <th className="px-4 py-3 font-semibold">跌幅</th>
                       <th className="px-4 py-3 font-semibold">金额</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
-                    {plan.layers.map((layer, index) => (
+                    {strategyPlan.layers.map((layer) => (
                       <tr key={layer.id}>
-                        <td className="px-4 py-3 font-semibold text-slate-700">{String(index + 1).padStart(2, '0')}</td>
-                        <td className="px-4 py-3 text-slate-600">{formatCurrency(layer.price)}</td>
-                        <td className="px-4 py-3 text-slate-600">{index === 0 ? '基准' : formatPercent(layer.drawdown, 1)}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-700">{String(layer.order).padStart(2, '0')}</td>
+                        <td className="px-4 py-3 text-slate-600">{layer.signal}</td>
+                        <td className="px-4 py-3 text-slate-600">{formatFundPrice(layer.price)}</td>
+                        <td className="px-4 py-3 text-slate-600">{layer.order === 1 ? '基准' : formatPercent(layer.drawdown, 1)}</td>
                         <td className="px-4 py-3 text-slate-900">{formatCurrency(layer.amount)}</td>
                       </tr>
                     ))}
@@ -1052,18 +1169,18 @@ export function HomeExperience({ links, inPagesDir = false }) {
             <Card>
               <SectionHeading eyebrow="Capital Mix" title="资金配置模型" />
               <div className="mt-6 flex min-h-[180px] items-end justify-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                {plan.layers.map((layer, index) => (
+                {strategyPlan.layers.map((layer, index) => (
                   <div key={layer.id} className="flex w-16 flex-col items-center gap-3">
                     <div
                       className={cx(
                         'flex w-full items-end justify-center rounded-t-2xl px-2 py-3 text-xs font-bold text-white',
-                        index === plan.layers.length - 1 ? 'bg-indigo-600' : 'bg-slate-400'
+                        layer.id === 'ma200-risk' ? 'bg-amber-500' : index === strategyPlan.layers.length - 1 ? 'bg-indigo-600' : 'bg-slate-400'
                       )}
-                      style={{ height: `${Math.max(layer.weight * 1.8, 44)}px` }}
+                      style={{ height: `${Math.max(layer.weight * 32, 44)}px` }}
                     >
-                      {formatPercent(layer.weight, 0)}
+                      {`${formatRawNumber(layer.weight, 1)}x`}
                     </div>
-                    <span className="text-xs font-semibold text-slate-400">阶段 {index + 1}</span>
+                    <span className="text-center text-[11px] font-semibold text-slate-400">{layer.label}</span>
                   </div>
                 ))}
               </div>
