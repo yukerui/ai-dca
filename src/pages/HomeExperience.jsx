@@ -180,7 +180,7 @@ function buildNasdaqStrategyPlan({
   const normalizedReservePct = Math.max(Number(cashReservePct) || 0, 0);
   const investableCapital = normalizedBudget * Math.max(0, 1 - normalizedReservePct / 100);
   const reserveCapital = normalizedBudget - investableCapital;
-  const layerBlueprints = [
+  const baseLayers = [
     {
       id: 'ma120-base',
       label: 'MA120 基准',
@@ -207,18 +207,31 @@ function buildNasdaqStrategyPlan({
       price: triggerPrice > 0 ? triggerPrice * 0.9 : 0,
       drawdown: 10,
       tone: 'slate'
-    },
-    {
-      id: 'ma200-risk',
-      label: 'MA200 风控',
-      signal: riskPrice > 0 ? '跌破 MA200' : '深度防守',
-      weight: 2.5,
-      price: riskPrice > 0 ? riskPrice : (triggerPrice > 0 ? triggerPrice * 0.85 : 0),
-      drawdown: triggerPrice > 0 && riskPrice > 0
-        ? Math.max((1 - riskPrice / triggerPrice) * 100, 0)
-        : 15,
-      tone: 'amber'
     }
+  ].filter((layer) => layer.price > 0);
+  const deepestBaseLayerPrice = baseLayers[baseLayers.length - 1]?.price || 0;
+  const canUseIndependentRiskLayer = riskPrice > 0 && deepestBaseLayerPrice > 0 && riskPrice < deepestBaseLayerPrice;
+  const layerBlueprints = [
+    ...baseLayers,
+    canUseIndependentRiskLayer
+      ? {
+          id: 'ma200-risk',
+          label: 'MA200 风控',
+          signal: '跌破 MA200',
+          weight: 2.5,
+          price: riskPrice,
+          drawdown: triggerPrice > 0 ? Math.max((1 - riskPrice / triggerPrice) * 100, 0) : 0,
+          tone: 'amber'
+        }
+      : {
+          id: 'ma120-minus-15',
+          label: 'MA120 - 15%',
+          signal: riskPrice > 0 ? 'MA200 仅作风控，不单列加仓' : '低于 MA120 15%',
+          weight: 2.5,
+          price: triggerPrice > 0 ? triggerPrice * 0.85 : 0,
+          drawdown: 15,
+          tone: 'amber'
+        }
   ].filter((layer) => layer.price > 0);
   const totalWeight = layerBlueprints.reduce((sum, layer) => sum + layer.weight, 0) || 1;
   const layers = layerBlueprints.map((layer, index) => {
@@ -242,7 +255,8 @@ function buildNasdaqStrategyPlan({
     reserveCapital,
     averageCost: totalShares > 0 ? totalAmount / totalShares : 0,
     triggerPrice,
-    riskPrice
+    riskPrice,
+    usesIndependentRiskLayer: canUseIndependentRiskLayer
   };
 }
 
@@ -939,7 +953,7 @@ export function HomeExperience({ links, inPagesDir = false }) {
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard accent="indigo" eyebrow="Portfolio Budget" value={formatCurrency(strategyPlan.investableCapital)} note="按 MA120 主触发策略分配的预算" progress={Math.max(100 - reserveRatio, 0)} />
-          <StatCard eyebrow="Reserve Cash" value={formatCurrency(strategyPlan.reserveCapital)} note={isBelowRiskControl ? '价格已跌破 MA200，进入防守区。' : `${formatPercent(reserveRatio, 1)} 作为 MA200 防守缓冲`} />
+          <StatCard eyebrow="Reserve Cash" value={formatCurrency(strategyPlan.reserveCapital)} note={isBelowRiskControl ? '价格已跌破 MA200，进入防守区。' : strategyPlan.usesIndependentRiskLayer ? `${formatPercent(reserveRatio, 1)} 作为 MA200 防守缓冲` : 'MA200 当前高于深水层，仅作趋势风控。'} />
           <StatCard eyebrow="Next Trigger" value={formatFundPrice(nextBuyPrice)} note={nextTriggerLayer ? nextTriggerLayer.signal : '当前已进入最深防守区'} />
           <StatCard accent="emerald" eyebrow="Average Cost" value={formatFundPrice(strategyPlan.averageCost)} note="按 MA120 触发层级与 MA200 风控重算" />
         </div>
