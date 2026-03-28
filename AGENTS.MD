@@ -19,3 +19,11 @@ When the user gives a new requirement, follow this sequence by default:
 - This workflow is the default for product and page-related requirements in this repository.
 - If a requirement is purely backend, data, or infrastructure work and Stitch is not applicable, explain that briefly during the planning step and continue with the rest of the flow.
 - If a higher-priority system, developer, or environment rule conflicts with this file, follow the higher-priority rule and then continue as close to this workflow as possible.
+
+## Mobile UI Guardrails
+
+- Do not compress mobile summary cards by placing title, badge, secondary copy, and status in the same tight row.
+- For mobile hero or summary cards, keep the structure layered: title block, badges/actions row, current context row, then metrics.
+- Long strategy names must have explicit line-height and enough vertical spacing to wrap naturally. Do not rely on default text leading in dense cards.
+- On mobile, badges should wrap to a new line before they squeeze or visually collide with the title.
+- Before finalizing a mobile page, check the key summary card in browser automation and verify that text blocks are visually separated rather than stacked into one dense cluster.

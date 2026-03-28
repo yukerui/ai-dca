@@ -1169,36 +1169,50 @@ export function HomeExperience({ links, inPagesDir = false }) {
       <div className="mx-auto max-w-6xl space-y-6 px-6 pt-8">
         <div className="space-y-4 md:hidden">
           <Card className="overflow-hidden border-0 bg-gradient-to-br from-indigo-600 via-indigo-500 to-sky-500 p-0 text-white shadow-xl shadow-indigo-200">
-            <div className="p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">当前执行策略</div>
-                  <div className="mt-1 break-words text-2xl font-extrabold">{planState?.name || activeStrategyOption.label}</div>
-                  <div className="mt-2 text-sm leading-6 text-indigo-100">
-                    {selectedFund?.code || '--'} · {selectedFund?.name || '未选择观察标的'}
+            <div className="space-y-5 p-5">
+              <div className="space-y-3">
+                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">当前执行策略</div>
+                <div className="space-y-2">
+                  <div className="max-w-[14ch] break-words text-[28px] font-extrabold leading-[1.15]">
+                    {planState?.name || activeStrategyOption.label}
+                  </div>
+                  <div className="text-sm leading-6 text-indigo-100">
+                    {planState?.name ? '已创建并启用的建仓模板' : '当前按默认模板展示策略建议'}
                   </div>
                 </div>
-                <span className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white">
-                  {activeStrategyOption.shortLabel}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white">
+                    {activeStrategyOption.shortLabel}
+                  </span>
+                  <span className="rounded-full bg-white/12 px-3 py-1 text-xs font-semibold text-white/90">
+                    基准 {benchmarkFund?.code || BENCHMARK_CODE}
+                  </span>
+                </div>
+                <div className="rounded-[22px] bg-white/12 px-4 py-3 backdrop-blur-sm">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">当前观察标的</div>
+                  <div className="mt-1 text-base font-semibold leading-6 text-white">
+                    {selectedFund?.code || '--'}
+                    {selectedFund?.name ? ` · ${selectedFund.name}` : ''}
+                  </div>
+                </div>
               </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-[22px] bg-white/12 px-4 py-3 backdrop-blur-sm">
                   <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">当前价格</div>
-                  <div className="mt-1 text-2xl font-extrabold">
+                  <div className="mt-2 text-[26px] font-extrabold leading-none">
                     {formatFundPrice(strategyDisplayCurrentPrice, strategyDisplayCurrency)}
                   </div>
                 </div>
                 <div className="rounded-[22px] bg-white/12 px-4 py-3 backdrop-blur-sm">
                   <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">下一次触发</div>
-                  <div className="mt-1 text-2xl font-extrabold">
+                  <div className="mt-2 text-[26px] font-extrabold leading-none">
                     {nextTriggerLayer ? formatFundPrice(nextBuyPrice, strategyDisplayCurrency) : '已到深水区'}
                   </div>
                 </div>
               </div>
 
-              <div className="mt-4 flex items-center justify-between text-sm font-semibold text-white/90">
+              <div className="flex items-center justify-between text-sm font-semibold text-white/90">
                 <span>已完成层级</span>
                 <span>{completedLayerCount}/{executionLayers.length || 0}</span>
               </div>
@@ -1209,9 +1223,9 @@ export function HomeExperience({ links, inPagesDir = false }) {
                 />
               </div>
 
-              <div className="mt-4 rounded-[24px] bg-white/12 px-4 py-3 backdrop-blur-sm">
+              <div className="rounded-[24px] bg-white/12 px-4 py-3 backdrop-blur-sm">
                 <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">下一步建议</div>
-                <div className="mt-1 text-sm font-semibold text-white">{nextStepSuggestion.title}</div>
+                <div className="mt-2 text-base font-semibold leading-6 text-white">{nextStepSuggestion.title}</div>
                 <div className="mt-1 text-sm leading-6 text-indigo-100">{nextStepSuggestion.note}</div>
               </div>
             </div>
