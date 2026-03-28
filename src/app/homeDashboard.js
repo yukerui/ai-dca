@@ -1,8 +1,14 @@
 const HOME_DASHBOARD_KEY = 'aiDcaHomeDashboardState';
 const HOME_DASHBOARD_SOURCE = 'qqq-home-dashboard';
 const FUND_CODE_PATTERN = /^\d{6}$/;
+const SPECIAL_MARKET_CODES = new Set(['nas-daq100']);
 const DEFAULT_STRATEGY = 'ma120-risk';
 const ALLOWED_STRATEGIES = new Set([DEFAULT_STRATEGY, 'peak-drawdown']);
+
+function isSupportedMarketCode(code = '') {
+  const normalized = String(code || '').trim().toLowerCase();
+  return FUND_CODE_PATTERN.test(normalized) || SPECIAL_MARKET_CODES.has(normalized);
+}
 
 function normalizeCodes(codes = [], availableCodes = []) {
   const available = new Set(Array.isArray(availableCodes) ? availableCodes.filter(Boolean) : []);
@@ -11,7 +17,7 @@ function normalizeCodes(codes = [], availableCodes = []) {
   return [...new Set(
     (Array.isArray(codes) ? codes : [])
       .map((code) => String(code || '').trim())
-      .filter((code) => FUND_CODE_PATTERN.test(code))
+      .filter((code) => isSupportedMarketCode(code))
       .filter((code) => !hasAvailabilityGuard || available.has(code))
   )];
 }
@@ -97,7 +103,7 @@ export function importHomeDashboardState(rawText, { availableCodes = [], default
 
   const normalized = normalizeHomeDashboardState(parsed, { availableCodes, defaultCodes });
   if (!normalized.watchlistCodes.length) {
-    throw new Error('导入文件里没有可用的 6 位基金代码。');
+    throw new Error('导入文件里没有可用的基金代码。');
   }
 
   return normalized;

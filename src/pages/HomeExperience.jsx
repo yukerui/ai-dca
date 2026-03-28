@@ -6,7 +6,8 @@ import { formatPriceAsOf, loadLatestNasdaqPrices, loadNasdaqDailySeries, loadNas
 import { readPlanState } from '../app/plan.js';
 import { Card, PageHero, PageShell, Pill, SectionHeading, SelectField, StatCard, cx, primaryButtonClass, secondaryButtonClass, subtleButtonClass } from '../components/experience-ui.jsx';
 
-const DEFAULT_WATCHLIST_CODES = ['513100', '159501', '159660'];
+const BENCHMARK_CODE = 'nas-daq100';
+const DEFAULT_WATCHLIST_CODES = [BENCHMARK_CODE, '513100', '159501', '159660'];
 const TIMEFRAME_OPTIONS = [
   { key: '1m', label: '1m', note: '分时' },
   { key: '15m', label: '15m', note: '短线' },
@@ -42,8 +43,12 @@ const PEAK_DRAWDOWN_LAYERS = [
   { drawdown: 33.5, label: '第7次加仓', signal: '较阶段高点累计跌幅 33.5%' }
 ];
 
-function formatFundPrice(value) {
-  return formatCurrency(value, '¥', 3);
+function resolveMarketCurrency(entry = null) {
+  return String(entry?.currency || '').trim() || '¥';
+}
+
+function formatFundPrice(value, currency = '¥') {
+  return formatCurrency(value, currency, 3);
 }
 
 function formatCompactNumber(value) {
@@ -489,7 +494,9 @@ export function HomeExperience({ links, inPagesDir = false }) {
   const [selectedStrategy, setSelectedStrategy] = useState(dashboardState.selectedStrategy);
   const [pendingCode, setPendingCode] = useState('');
   const [minuteSnapshot, setMinuteSnapshot] = useState(null);
+  const [fifteenMinuteSnapshot, setFifteenMinuteSnapshot] = useState(null);
   const [dailySeries, setDailySeries] = useState([]);
+  const [benchmarkDailySeries, setBenchmarkDailySeries] = useState([]);
   const [pulseError, setPulseError] = useState('');
   const [isLoadingPulse, setIsLoadingPulse] = useState(false);
   const [watchlistNotice, setWatchlistNotice] = useState('');
@@ -609,10 +616,17 @@ export function HomeExperience({ links, inPagesDir = false }) {
   }, [marketEntries.length, selectedCode, selectedStrategy, visibleWatchlistCodes]);
 
   const selectedFund = useMemo(() => marketByCode.get(selectedCode) || null, [marketByCode, selectedCode]);
+  const benchmarkFund = useMemo(
+    () => marketByCode.get(BENCHMARK_CODE) || selectedFund || null,
+    [marketByCode, selectedFund]
+  );
+  const selectedFundCurrency = resolveMarketCurrency(selectedFund);
+  const benchmarkCurrency = resolveMarketCurrency(benchmarkFund);
 
   useEffect(() => {
     if (!selectedFund?.output_path) {
       setMinuteSnapshot(null);
+      setFifteenMinuteSnapshot(null);
       setDailySeries([]);
       setPulseError('');
       setIsLoadingPulse(false);
@@ -622,11 +636,16 @@ export function HomeExperience({ links, inPagesDir = false }) {
     let cancelled = false;
 
     setIsLoadingPulse(true);
-    Promise.allSettled([
+    const requests = [
       loadNasdaqMinuteSnapshot(selectedFund, { inPagesDir }),
+      selectedFund?.output_path_15m
+        ? loadNasdaqMinuteSnapshot(selectedFund.output_path_15m, { inPagesDir })
+        : Promise.resolve(null),
       loadNasdaqDailySeries(selectedFund.code, { inPagesDir })
-    ])
-      .then(([minuteResult, dailySeriesResult]) => {
+    ];
+
+    Promise.allSettled(requests)
+      .then(([minuteResult, fifteenMinuteResult, dailySeriesResult]) => {
         if (cancelled) {
           return;
         }
@@ -637,6 +656,12 @@ export function HomeExperience({ links, inPagesDir = false }) {
         } else {
           setMinuteSnapshot(null);
           setPulseError(minuteResult.reason instanceof Error ? minuteResult.reason.message : '分钟线数据加载失败');
+        }
+
+        if (fifteenMinuteResult.status === 'fulfilled') {
+          setFifteenMinuteSnapshot(fifteenMinuteResult.value);
+        } else {
+          setFifteenMinuteSnapshot(null);
         }
 
         if (dailySeriesResult.status === 'fulfilled') {
@@ -659,23 +684,55 @@ export function HomeExperience({ links, inPagesDir = false }) {
     };
   }, [inPagesDir, selectedFund]);
 
+  useEffect(() => {
+    if (!benchmarkFund?.code) {
+      setBenchmarkDailySeries([]);
+      return;
+    }
+
+    let cancelled = false;
+    loadNasdaqDailySeries(benchmarkFund.code, { inPagesDir })
+      .then((bars) => {
+        if (!cancelled) {
+          setBenchmarkDailySeries(Array.isArray(bars) ? bars : []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBenchmarkDailySeries([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [benchmarkFund?.code, inPagesDir]);
+
   const normalizedMinuteBars = useMemo(
     () => normalizeMinuteBars(minuteSnapshot?.bars || []),
     [minuteSnapshot]
   );
+  const normalizedFifteenMinuteBars = useMemo(
+    () => normalizeMinuteBars(fifteenMinuteSnapshot?.bars || []),
+    [fifteenMinuteSnapshot]
+  );
   const fullBarsByTimeframe = useMemo(() => ({
     '1m': normalizedMinuteBars,
-    '15m': aggregateMinuteBars(normalizedMinuteBars, 15),
+    '15m': normalizedFifteenMinuteBars.length ? normalizedFifteenMinuteBars : aggregateMinuteBars(normalizedMinuteBars, 15),
     '1d': buildDailyBars(dailySeries)
-  }), [dailySeries, normalizedMinuteBars]);
+  }), [dailySeries, normalizedFifteenMinuteBars, normalizedMinuteBars]);
   const dailyBars = fullBarsByTimeframe['1d'] || [];
+  const benchmarkDailyBars = useMemo(
+    () => buildDailyBars(benchmarkDailySeries),
+    [benchmarkDailySeries]
+  );
   const dailyMa120Values = useMemo(
-    () => buildMovingAverageValues(dailyBars, 120, { allowPartial: dailyBars.length < 120 }),
-    [dailyBars]
+    () => buildMovingAverageValues(benchmarkDailyBars, 120, { allowPartial: benchmarkDailyBars.length < 120 }),
+    [benchmarkDailyBars]
   );
   const dailyMa200Values = useMemo(
-    () => buildMovingAverageValues(dailyBars, 200, { allowPartial: dailyBars.length < 200 }),
-    [dailyBars]
+    () => buildMovingAverageValues(benchmarkDailyBars, 200, { allowPartial: benchmarkDailyBars.length < 200 }),
+    [benchmarkDailyBars]
   );
   const latestDailyMa120 = useMemo(
     () => findLatestFiniteValue(dailyMa120Values),
@@ -686,13 +743,14 @@ export function HomeExperience({ links, inPagesDir = false }) {
     [dailyMa200Values]
   );
   const stageHighPrice = useMemo(() => {
-    const values = dailyBars
+    const values = benchmarkDailyBars
       .flatMap((bar) => [Number(bar.high) || 0, Number(bar.close) || 0])
       .filter((value) => Number.isFinite(value) && value > 0);
 
     return values.length ? Math.max(...values) : 0;
-  }, [dailyBars]);
+  }, [benchmarkDailyBars]);
   const currentFundPrice = Number(selectedFund?.current_price) || 0;
+  const currentBenchmarkPrice = Number(benchmarkFund?.current_price) || currentFundPrice;
   const activeStrategyOption = useMemo(
     () => STRATEGY_OPTIONS.find((option) => option.key === selectedStrategy) || STRATEGY_OPTIONS[0],
     [selectedStrategy]
@@ -706,12 +764,12 @@ export function HomeExperience({ links, inPagesDir = false }) {
       return latestDailyMa200;
     }
 
-    if (Number.isFinite(currentFundPrice) && currentFundPrice > 0) {
-      return currentFundPrice;
+    if (Number.isFinite(currentBenchmarkPrice) && currentBenchmarkPrice > 0) {
+      return currentBenchmarkPrice;
     }
 
     return Number(planState.basePrice) || Number(accumulationState.basePrice) || 0;
-  }, [accumulationState.basePrice, currentFundPrice, latestDailyMa120, latestDailyMa200, planState.basePrice]);
+  }, [accumulationState.basePrice, currentBenchmarkPrice, latestDailyMa120, latestDailyMa200, planState.basePrice]);
   const riskControlPrice = useMemo(() => {
     if (Number.isFinite(latestDailyMa200)) {
       return latestDailyMa200;
@@ -725,26 +783,26 @@ export function HomeExperience({ links, inPagesDir = false }) {
           totalBudget: planState.totalBudget,
           cashReservePct: planState.cashReservePct,
           peakPrice: stageHighPrice,
-          fallbackPrice: currentFundPrice || Number(accumulationState.basePrice) || Number(planState.basePrice) || 0
+          fallbackPrice: currentBenchmarkPrice || Number(accumulationState.basePrice) || Number(planState.basePrice) || 0
         })
       : buildNasdaqStrategyPlan({
           totalBudget: planState.totalBudget,
           cashReservePct: planState.cashReservePct,
           ma120: strategyTriggerPrice,
           ma200: riskControlPrice,
-          fallbackPrice: currentFundPrice || Number(accumulationState.basePrice) || Number(planState.basePrice) || 0
+          fallbackPrice: currentBenchmarkPrice || Number(accumulationState.basePrice) || Number(planState.basePrice) || 0
         })),
-    [accumulationState.basePrice, currentFundPrice, planState.basePrice, planState.cashReservePct, planState.totalBudget, riskControlPrice, selectedStrategy, stageHighPrice, strategyTriggerPrice]
+    [accumulationState.basePrice, currentBenchmarkPrice, planState.basePrice, planState.cashReservePct, planState.totalBudget, riskControlPrice, selectedStrategy, stageHighPrice, strategyTriggerPrice]
   );
   const reserveRatio = planState.totalBudget > 0 ? strategyPlan.reserveCapital / planState.totalBudget * 100 : 0;
   const nextTriggerLayer = useMemo(
-    () => resolveNextTriggerLayer(strategyPlan.layers, currentFundPrice),
-    [currentFundPrice, strategyPlan.layers]
+    () => resolveNextTriggerLayer(strategyPlan.layers, currentBenchmarkPrice),
+    [currentBenchmarkPrice, strategyPlan.layers]
   );
   const nextBuyPrice = nextTriggerLayer?.price ?? strategyPlan.triggerPrice;
   const executionLayers = useMemo(
     () => strategyPlan.layers.map((layer) => {
-      const isCompleted = currentFundPrice > 0 && currentFundPrice <= layer.price;
+      const isCompleted = currentBenchmarkPrice > 0 && currentBenchmarkPrice <= layer.price;
       const isNext = !isCompleted && nextTriggerLayer?.id === layer.id;
 
       return {
@@ -754,14 +812,14 @@ export function HomeExperience({ links, inPagesDir = false }) {
         progressTone: isCompleted ? 'emerald' : isNext ? 'indigo' : 'slate'
       };
     }),
-    [currentFundPrice, nextTriggerLayer?.id, strategyPlan.layers]
+    [currentBenchmarkPrice, nextTriggerLayer?.id, strategyPlan.layers]
   );
   const completedLayerCount = useMemo(
     () => executionLayers.filter((layer) => layer.progressState === 'completed').length,
     [executionLayers]
   );
-  const isBelowRiskControl = currentFundPrice > 0 && riskControlPrice > 0 && currentFundPrice < riskControlPrice;
-  const isBelowPeakExtreme = selectedStrategy === 'peak-drawdown' && currentFundPrice > 0 && strategyPlan.riskPrice > 0 && currentFundPrice <= strategyPlan.riskPrice;
+  const isBelowRiskControl = currentBenchmarkPrice > 0 && riskControlPrice > 0 && currentBenchmarkPrice < riskControlPrice;
+  const isBelowPeakExtreme = selectedStrategy === 'peak-drawdown' && currentBenchmarkPrice > 0 && strategyPlan.riskPrice > 0 && currentBenchmarkPrice <= strategyPlan.riskPrice;
 
   const fullBars = fullBarsByTimeframe[timeframe] || [];
   const displayBars = useMemo(
@@ -1010,6 +1068,7 @@ export function HomeExperience({ links, inPagesDir = false }) {
           <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {watchlistItems.map((item) => {
               const isActive = item.code === selectedCode;
+              const itemCurrency = resolveMarketCurrency(item);
               return (
                 <div
                   key={item.code}
@@ -1046,7 +1105,7 @@ export function HomeExperience({ links, inPagesDir = false }) {
                     <div>
                       <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">现价</div>
                       <div className={cx('mt-1 text-xl font-bold', isActive ? 'text-indigo-700' : 'text-slate-900')}>
-                        {formatFundPrice(item.current_price)}
+                        {formatFundPrice(item.current_price, itemCurrency)}
                       </div>
                     </div>
                     <span className={cx('rounded-full px-3 py-1 text-xs font-semibold', isActive ? 'bg-white text-indigo-600' : 'bg-white text-slate-500')}>
@@ -1071,6 +1130,9 @@ export function HomeExperience({ links, inPagesDir = false }) {
               <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Strategy Template</div>
               <div className="mt-1 text-lg font-bold text-slate-800">{activeStrategyOption.label}</div>
               <div className="mt-1 text-sm text-slate-500">{activeStrategyOption.note}</div>
+              <div className="mt-1 text-sm text-slate-500">
+                当前参考基准 {benchmarkFund?.code || BENCHMARK_CODE} · {formatFundPrice(currentBenchmarkPrice, benchmarkCurrency)}
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {STRATEGY_OPTIONS.map((option) => (
@@ -1095,8 +1157,8 @@ export function HomeExperience({ links, inPagesDir = false }) {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard accent="indigo" eyebrow="Portfolio Budget" value={formatCurrency(strategyPlan.investableCapital)} note={selectedStrategy === 'peak-drawdown' ? '按阶段高点固定回撤 8 档分配预算' : '按 MA120 主触发策略分配的预算'} progress={Math.max(100 - reserveRatio, 0)} />
           <StatCard eyebrow="Reserve Cash" value={formatCurrency(strategyPlan.reserveCapital)} note={selectedStrategy === 'peak-drawdown' ? (isBelowPeakExtreme ? '价格已进入第 8 档极端区。' : `${formatPercent(reserveRatio, 1)} 作为极端回撤缓冲`) : (isBelowRiskControl ? '价格已跌破 MA200，进入防守区。' : strategyPlan.usesIndependentRiskLayer ? `${formatPercent(reserveRatio, 1)} 作为 MA200 防守缓冲` : 'MA200 当前高于深水层，仅作趋势风控。')} />
-          <StatCard eyebrow="Next Trigger" value={formatFundPrice(nextBuyPrice)} note={nextTriggerLayer ? nextTriggerLayer.signal : selectedStrategy === 'peak-drawdown' ? '当前已进入第 8 档极端区' : '当前已进入最深防守区'} />
-          <StatCard accent="emerald" eyebrow="Average Cost" value={formatFundPrice(strategyPlan.averageCost)} note={selectedStrategy === 'peak-drawdown' ? '按固定跌幅 8 档与序号递增仓位重算' : '按 MA120 触发层级与 MA200 风控重算'} />
+          <StatCard eyebrow="Next Trigger" value={formatFundPrice(nextBuyPrice, benchmarkCurrency)} note={nextTriggerLayer ? `${benchmarkFund?.code || BENCHMARK_CODE} · ${nextTriggerLayer.signal}` : selectedStrategy === 'peak-drawdown' ? '当前已进入第 8 档极端区' : '当前已进入最深防守区'} />
+          <StatCard accent="emerald" eyebrow="Average Cost" value={formatFundPrice(strategyPlan.averageCost, benchmarkCurrency)} note={selectedStrategy === 'peak-drawdown' ? `${benchmarkFund?.code || BENCHMARK_CODE} 固定跌幅 8 档重算` : `${benchmarkFund?.code || BENCHMARK_CODE} MA120 / MA200 重算`} />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,0.95fr)]">
@@ -1112,7 +1174,7 @@ export function HomeExperience({ links, inPagesDir = false }) {
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div className="space-y-1">
                       <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">K-Line Monitor</div>
-                      <div className="text-2xl font-extrabold text-slate-900">{formatFundPrice(pricePulse.latestPrice)}</div>
+                      <div className="text-2xl font-extrabold text-slate-900">{formatFundPrice(pricePulse.latestPrice, selectedFundCurrency)}</div>
                       <div className={cx('text-sm font-semibold', pricePulse.changePct >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
                         {formatPercent(pricePulse.changePct, 2, true)}
                       </div>
@@ -1288,25 +1350,26 @@ export function HomeExperience({ links, inPagesDir = false }) {
                 title="建仓计划详情"
                 action={
                   <div className="flex flex-wrap items-center gap-2">
+                    <Pill tone="indigo">基准 {benchmarkFund?.code || BENCHMARK_CODE}</Pill>
                     {selectedStrategy === 'peak-drawdown' ? (
                       <>
                         <Pill tone="violet">阶段高点</Pill>
-                        <Pill tone="slate">{formatFundPrice(strategyPlan.anchorPrice)}</Pill>
+                        <Pill tone="slate">{formatFundPrice(strategyPlan.anchorPrice, benchmarkCurrency)}</Pill>
                         <Pill tone="amber">固定回撤 8 档</Pill>
                       </>
                     ) : (
                       <>
                         <Pill tone="violet">MA120 触发</Pill>
-                        <Pill tone="slate">{formatFundPrice(strategyTriggerPrice)}</Pill>
+                        <Pill tone="slate">{formatFundPrice(strategyTriggerPrice, benchmarkCurrency)}</Pill>
                         <Pill tone="amber">MA200 风控</Pill>
-                        <Pill tone="slate">{formatFundPrice(riskControlPrice)}</Pill>
+                        <Pill tone="slate">{formatFundPrice(riskControlPrice, benchmarkCurrency)}</Pill>
                       </>
                     )}
                   </div>
                 }
               />
               <div className="mt-4 flex flex-wrap items-center gap-2">
-                <Pill tone="slate">当前价 {formatFundPrice(currentFundPrice)}</Pill>
+                <Pill tone="slate">基准现价 {formatFundPrice(currentBenchmarkPrice, benchmarkCurrency)}</Pill>
                 <Pill tone="emerald">已完成 {completedLayerCount}/{executionLayers.length} 档</Pill>
               </div>
               <div className="mt-5 overflow-x-auto rounded-2xl border border-slate-200">
@@ -1338,7 +1401,7 @@ export function HomeExperience({ links, inPagesDir = false }) {
                           <Pill tone={layer.progressTone}>{layer.progressLabel}</Pill>
                         </td>
                         <td className="px-4 py-3 text-slate-600">{layer.signal}</td>
-                        <td className="px-4 py-3 text-slate-600">{formatFundPrice(layer.price)}</td>
+                        <td className="px-4 py-3 text-slate-600">{formatFundPrice(layer.price, benchmarkCurrency)}</td>
                         <td className="px-4 py-3 text-slate-600">{selectedStrategy === 'peak-drawdown' ? formatPercent(layer.drawdown, 1) : (layer.order === 1 ? '基准' : formatPercent(layer.drawdown, 1))}</td>
                         <td className="px-4 py-3 text-slate-900">{formatCurrency(layer.amount)}</td>
                       </tr>

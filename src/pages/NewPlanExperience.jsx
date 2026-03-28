@@ -6,6 +6,7 @@ import { loadLatestNasdaqPrices, loadNasdaqDailySeries } from '../app/nasdaqPric
 import { persistPlanState, readPlanState } from '../app/plan.js';
 import { Card, Field, NumberInput, PageHero, PageShell, Pill, SectionHeading, SelectField, cx, primaryButtonClass, secondaryButtonClass } from '../components/experience-ui.jsx';
 
+const BENCHMARK_CODE = 'nas-daq100';
 const frequencyOptions = ['每日', '每周', '每月', '每季'];
 const strategyOptions = [
   {
@@ -189,8 +190,12 @@ function buildFixedDrawdownPlan(state) {
   };
 }
 
-function formatFundPrice(value) {
-  return formatCurrency(value, '¥', 3);
+function resolveMarketCurrency(entry = null) {
+  return String(entry?.currency || '').trim() || '¥';
+}
+
+function formatFundPrice(value, currency = '¥') {
+  return formatCurrency(value, currency, 3);
 }
 
 export function NewPlanExperience({ links, inPagesDir = false }) {
@@ -237,11 +242,13 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
     }
 
     const availableCodes = new Set(marketEntries.map((entry) => entry.code));
+    const nonBenchmarkEntries = marketEntries.filter((entry) => entry.code !== BENCHMARK_CODE);
+    const dashboardPreferredCode = String(dashboardState.selectedCode || '').trim();
     const preferredCode = availableCodes.has(String(state.symbol || '').trim())
       ? String(state.symbol || '').trim()
-      : availableCodes.has(String(dashboardState.selectedCode || '').trim())
-        ? String(dashboardState.selectedCode || '').trim()
-        : marketEntries[0]?.code || '';
+      : dashboardPreferredCode && dashboardPreferredCode !== BENCHMARK_CODE && availableCodes.has(dashboardPreferredCode)
+        ? dashboardPreferredCode
+        : nonBenchmarkEntries[0]?.code || marketEntries[0]?.code || '';
 
     if (preferredCode && preferredCode !== state.symbol) {
       setState((current) => ({ ...current, symbol: preferredCode }));
@@ -253,9 +260,15 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
     () => marketEntries.find((entry) => entry.code === state.symbol) || null,
     [marketEntries, state.symbol]
   );
+  const benchmarkFund = useMemo(
+    () => marketEntries.find((entry) => entry.code === BENCHMARK_CODE) || selectedFund || null,
+    [marketEntries, selectedFund]
+  );
+  const selectedFundCurrency = resolveMarketCurrency(selectedFund);
+  const benchmarkCurrency = resolveMarketCurrency(benchmarkFund);
 
   useEffect(() => {
-    if (!selectedFund?.code) {
+    if (!benchmarkFund?.code) {
       setDailySeriesState({
         code: '',
         bars: [],
@@ -265,7 +278,7 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
     }
 
     let cancelled = false;
-    const nextCode = selectedFund.code;
+    const nextCode = benchmarkFund.code;
 
     setDailySeriesState({
       code: nextCode,
@@ -296,13 +309,13 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
     return () => {
       cancelled = true;
     };
-  }, [inPagesDir, selectedFund?.code]);
+  }, [benchmarkFund?.code, inPagesDir]);
 
   const selectedDailySeries = useMemo(
-    () => (dailySeriesState.code === selectedFund?.code ? dailySeriesState.bars : []),
-    [dailySeriesState.bars, dailySeriesState.code, selectedFund?.code]
+    () => (dailySeriesState.code === benchmarkFund?.code ? dailySeriesState.bars : []),
+    [benchmarkFund?.code, dailySeriesState.bars, dailySeriesState.code]
   );
-  const isSelectedDailySeriesReady = !selectedFund?.code || (dailySeriesState.code === selectedFund.code && dailySeriesState.ready);
+  const isSelectedDailySeriesReady = !benchmarkFund?.code || (dailySeriesState.code === benchmarkFund.code && dailySeriesState.ready);
 
   const derivedStageHigh = useMemo(() => {
     const values = selectedDailySeries
@@ -313,11 +326,11 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
       return Math.max(...values);
     }
 
-    return Number(selectedFund?.current_price) || 0;
-  }, [selectedDailySeries, selectedFund]);
+    return Number(benchmarkFund?.current_price) || Number(selectedFund?.current_price) || 0;
+  }, [benchmarkFund, selectedDailySeries, selectedFund]);
   const derivedMa120 = useMemo(
-    () => findLatestFiniteValue(buildMovingAverageValues(selectedDailySeries, 120)) || Number(selectedFund?.current_price) || 0,
-    [selectedDailySeries, selectedFund]
+    () => findLatestFiniteValue(buildMovingAverageValues(selectedDailySeries, 120)) || Number(benchmarkFund?.current_price) || Number(selectedFund?.current_price) || 0,
+    [benchmarkFund, selectedDailySeries, selectedFund]
   );
   const derivedMa200 = useMemo(
     () => findLatestFiniteValue(buildMovingAverageValues(selectedDailySeries, 200)) || (derivedMa120 > 0 ? derivedMa120 * 0.85 : 0),
@@ -325,11 +338,11 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
   );
 
   useEffect(() => {
-    if (!selectedFund?.code || !isSelectedDailySeriesReady) {
+    if (!benchmarkFund?.code || !isSelectedDailySeriesReady) {
       return;
     }
 
-    const syncKey = `${selectedFund.code}:${selectedStrategy}`;
+    const syncKey = `${benchmarkFund.code}:${selectedStrategy}`;
     if (autoSeedRef.current === syncKey) {
       return;
     }
@@ -340,7 +353,7 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
       riskControlPrice: selectedStrategy === 'peak-drawdown' ? current.riskControlPrice : derivedMa200
     }));
     autoSeedRef.current = syncKey;
-  }, [derivedMa120, derivedMa200, derivedStageHigh, isSelectedDailySeriesReady, selectedFund?.code, selectedStrategy]);
+  }, [benchmarkFund?.code, derivedMa120, derivedMa200, derivedStageHigh, isSelectedDailySeriesReady, selectedStrategy]);
 
   const activeStrategy = useMemo(
     () => strategyOptions.find((option) => option.key === selectedStrategy) || strategyOptions[0],
@@ -359,8 +372,8 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
   }, [computed, selectedStrategy, state]);
 
   const strategySummary = selectedStrategy === 'peak-drawdown'
-    ? `按阶段高点 ${formatFundPrice(computed.anchorPrice)} 向下拆成 8 档固定回撤。`
-    : `按 MA120 触发价 ${formatFundPrice(computed.anchorPrice)} 和 MA200 风控价 ${formatFundPrice(computed.riskPrice)} 生成分层。`;
+    ? `按 ${benchmarkFund?.code || BENCHMARK_CODE} 的阶段高点 ${formatFundPrice(computed.anchorPrice, benchmarkCurrency)} 向下拆成 8 档固定回撤。`
+    : `按 ${benchmarkFund?.code || BENCHMARK_CODE} 的 MA120 触发价 ${formatFundPrice(computed.anchorPrice, benchmarkCurrency)} 和 MA200 风控价 ${formatFundPrice(computed.riskPrice, benchmarkCurrency)} 生成分层。`;
 
   return (
     <PageShell>
@@ -372,6 +385,7 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
         description="使用和首页一致的纳指 ETF 标的池，按均线分层或固定回撤模板一次把预算、现金留存和执行计划配置清楚。"
         badges={[
           <Pill key="symbol" tone="indigo">{selectedFund?.code || state.symbol || '未选择标的'}</Pill>,
+          <Pill key="benchmark" tone="slate">{benchmarkFund?.code || BENCHMARK_CODE}</Pill>,
           <Pill key="strategy" tone="slate">{activeStrategy.label}</Pill>
         ]}
       />
@@ -411,7 +425,8 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
                 {selectedFund ? (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
                     <div className="font-semibold text-slate-900">{selectedFund.name}</div>
-                    <div className="mt-1">当前现价 {formatFundPrice(selectedFund.current_price)}</div>
+                    <div className="mt-1">当前现价 {formatFundPrice(selectedFund.current_price, selectedFundCurrency)}</div>
+                    <div className="mt-1">策略参考基准 {benchmarkFund?.code || BENCHMARK_CODE} · {formatFundPrice(benchmarkFund?.current_price, benchmarkCurrency)}</div>
                   </div>
                 ) : null}
 
@@ -473,11 +488,12 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
                 ))}
               </div>
 
-              <div className="mt-5 rounded-[24px] border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white p-5">
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-500">当前模板说明</div>
-                <div className="mt-2 text-lg font-bold text-indigo-700">{activeStrategy.label}</div>
-                <p className="mt-3 text-sm leading-6 text-slate-500">{strategySummary}</p>
-              </div>
+                <div className="mt-5 rounded-[24px] border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white p-5">
+                  <div className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-500">当前模板说明</div>
+                  <div className="mt-2 text-lg font-bold text-indigo-700">{activeStrategy.label}</div>
+                  <div className="mt-2 text-sm font-semibold text-slate-700">参考基准 {benchmarkFund?.name || BENCHMARK_CODE}</div>
+                  <p className="mt-3 text-sm leading-6 text-slate-500">{strategySummary}</p>
+                </div>
             </Card>
 
             <Card className="min-w-0 overflow-hidden">
@@ -534,7 +550,7 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
               <SectionHeading eyebrow="Plan Preview" title="策略成本预览" />
               <div className="mt-6 rounded-[24px] border border-white/80 bg-white/90 p-5 shadow-sm">
                 <div className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-500">预估平均成本</div>
-                <div className="mt-2 text-3xl font-extrabold tracking-tight text-indigo-700">{formatFundPrice(computed.averageCost)}</div>
+                <div className="mt-2 text-3xl font-extrabold tracking-tight text-indigo-700">{formatFundPrice(computed.averageCost, benchmarkCurrency)}</div>
                 <div className="mt-4 grid gap-3">
                   <div className="flex items-center justify-between text-sm text-slate-500">
                     <span>可投入资金</span>
@@ -545,8 +561,8 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
                     <strong className="text-slate-900">{formatCurrency(computed.reserveCapital, '¥ ')}</strong>
                   </div>
                   <div className="flex items-center justify-between text-sm text-slate-500">
-                    <span>{computed.anchorLabel}</span>
-                    <strong className="text-slate-900">{formatFundPrice(computed.anchorPrice)}</strong>
+                    <span>{computed.anchorLabel} ({benchmarkFund?.code || BENCHMARK_CODE})</span>
+                    <strong className="text-slate-900">{formatFundPrice(computed.anchorPrice, benchmarkCurrency)}</strong>
                   </div>
                 </div>
               </div>
