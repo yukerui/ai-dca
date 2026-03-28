@@ -3,7 +3,7 @@ import { Download, Plus, Trash2, Upload } from 'lucide-react';
 import { formatCurrency, formatPercent, readAccumulationState } from '../app/accumulation.js';
 import { exportHomeDashboardState, importHomeDashboardState, normalizeHomeDashboardState, persistHomeDashboardState, readHomeDashboardState } from '../app/homeDashboard.js';
 import { formatPriceAsOf, loadLatestNasdaqPrices, loadNasdaqDailySeries, loadNasdaqMinuteSnapshot } from '../app/nasdaqPrices.js';
-import { readPlanState } from '../app/plan.js';
+import { readPlanList, readPlanState, setActivePlanId } from '../app/plan.js';
 import { Card, PageHero, PageShell, Pill, SectionHeading, SelectField, StatCard, cx, primaryButtonClass, subtleButtonClass } from '../components/experience-ui.jsx';
 
 const BENCHMARK_CODE = 'nas-daq100';
@@ -68,6 +68,15 @@ function formatRawNumber(value, digits = 3) {
   }
 
   return Number(value).toFixed(digits).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
+}
+
+function formatPlanTimeLabel(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return '--';
+  }
+
+  return raw.slice(0, 16).replace('T', ' ');
 }
 
 function mapReferencePrice(value, ratio = 1) {
@@ -499,13 +508,15 @@ function buildChartGeometry(displayBars = [], overlays = {}) {
 
 export function HomeExperience({ links, inPagesDir = false }) {
   const accumulationState = readAccumulationState();
-  const planState = readPlanState();
+  const initialPlanState = readPlanState();
   const [dashboardState] = useState(() => readHomeDashboardState());
 
   const [marketEntries, setMarketEntries] = useState([]);
   const [marketError, setMarketError] = useState('');
+  const [planList, setPlanList] = useState(() => readPlanList());
+  const [activePlanId, setActivePlanIdState] = useState(() => initialPlanState.id || '');
   const [watchlistCodes, setWatchlistCodes] = useState(dashboardState.watchlistCodes);
-  const [selectedCode, setSelectedCode] = useState(dashboardState.selectedCode);
+  const [selectedCode, setSelectedCode] = useState(() => (initialPlanState.isConfigured ? initialPlanState.symbol : dashboardState.selectedCode));
   const [pendingCode, setPendingCode] = useState('');
   const [minuteSnapshot, setMinuteSnapshot] = useState(null);
   const [fifteenMinuteSnapshot, setFifteenMinuteSnapshot] = useState(null);
@@ -518,8 +529,12 @@ export function HomeExperience({ links, inPagesDir = false }) {
   const [timeframe, setTimeframe] = useState('1m');
   const [activeBarId, setActiveBarId] = useState('');
   const importInputRef = useRef(null);
+  const planState = useMemo(
+    () => planList.find((plan) => plan.id === activePlanId) || initialPlanState,
+    [activePlanId, initialPlanState, planList]
+  );
   const selectedStrategy = planState.selectedStrategy || 'ma120-risk';
-  const hasConfiguredPlan = Boolean(planState.isConfigured);
+  const hasConfiguredPlan = planList.length > 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -630,6 +645,21 @@ export function HomeExperience({ links, inPagesDir = false }) {
     });
   }, [marketEntries.length, selectedCode, visibleWatchlistCodes]);
 
+  useEffect(() => {
+    if (!planList.length) {
+      if (activePlanId) {
+        setActivePlanIdState('');
+      }
+      return;
+    }
+
+    if (!planList.some((plan) => plan.id === activePlanId)) {
+      const nextPlanId = planList[0].id;
+      setActivePlanIdState(nextPlanId);
+      setActivePlanId(nextPlanId);
+    }
+  }, [activePlanId, planList]);
+
   const selectedFund = useMemo(() => marketByCode.get(selectedCode) || null, [marketByCode, selectedCode]);
   const benchmarkFund = useMemo(
     () => marketByCode.get(BENCHMARK_CODE) || selectedFund || null,
@@ -637,6 +667,15 @@ export function HomeExperience({ links, inPagesDir = false }) {
   );
   const selectedFundCurrency = resolveMarketCurrency(selectedFund);
   const benchmarkCurrency = resolveMarketCurrency(benchmarkFund);
+
+  useEffect(() => {
+    if (!planState?.isConfigured || !planState.symbol || !marketByCode.has(planState.symbol)) {
+      return;
+    }
+
+    setSelectedCode((current) => (current === planState.symbol ? current : planState.symbol));
+    setWatchlistCodes((current) => (current.includes(planState.symbol) ? current : [...current, planState.symbol]));
+  }, [marketByCode, planState?.id, planState?.isConfigured, planState?.symbol]);
 
   useEffect(() => {
     if (!selectedFund?.output_path) {
@@ -1017,6 +1056,21 @@ export function HomeExperience({ links, inPagesDir = false }) {
     setWatchlistNoticeTone('slate');
   }
 
+  function handleSelectPlan(planId) {
+    const targetPlan = planList.find((plan) => plan.id === planId);
+    if (!targetPlan) {
+      return;
+    }
+
+    setActivePlanIdState(targetPlan.id);
+    setActivePlanId(targetPlan.id);
+
+    if (targetPlan.symbol) {
+      setSelectedCode(targetPlan.symbol);
+      setWatchlistCodes((current) => (current.includes(targetPlan.symbol) ? current : [...current, targetPlan.symbol]));
+    }
+  }
+
   return (
     <PageShell>
       <PageHero
@@ -1026,8 +1080,7 @@ export function HomeExperience({ links, inPagesDir = false }) {
         title="QQQ 建仓策略总览"
         badges={[
           <Pill key="status" tone="indigo">{hasConfiguredPlan ? '已创建策略' : '待创建策略'}</Pill>,
-          <Pill key="strategy" tone="slate">{activeStrategyOption.shortLabel}</Pill>,
-          <Pill key="layers" tone="slate">{strategyPlan.layers.length} 层建仓</Pill>
+          <Pill key="strategy" tone="slate">{activeStrategyOption.shortLabel}</Pill>
         ]}
         actions={
           <>
@@ -1040,6 +1093,65 @@ export function HomeExperience({ links, inPagesDir = false }) {
       />
 
       <div className="mx-auto max-w-6xl space-y-6 px-6 pt-8">
+        <Card>
+          <SectionHeading
+            eyebrow="Plans"
+            title="策略列表"
+            description="先在新建页创建策略，再回到这里切换查看。首页不直接修改策略模板。"
+            action={
+              <a className={primaryButtonClass} href={links.accumNew}>
+                <Plus className="h-4 w-4" />
+                新建策略
+              </a>
+            }
+          />
+
+          {planList.length ? (
+            <div className="mt-5 grid gap-3">
+              {planList.map((plan) => {
+                const isActive = plan.id === planState.id;
+                return (
+                  <button
+                    key={plan.id}
+                    className={cx(
+                      'rounded-[24px] border px-4 py-4 text-left transition-all',
+                      isActive
+                        ? 'border-indigo-200 bg-indigo-50 shadow-sm shadow-indigo-100'
+                        : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'
+                    )}
+                    type="button"
+                    onClick={() => handleSelectPlan(plan.id)}
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="text-base font-semibold text-slate-900">{plan.name}</div>
+                          <Pill tone={plan.selectedStrategy === 'peak-drawdown' ? 'amber' : 'indigo'}>
+                            {plan.selectedStrategy === 'peak-drawdown' ? '固定回撤' : '均线分层'}
+                          </Pill>
+                          {isActive ? <Pill tone="emerald">当前查看</Pill> : null}
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                          <span>标的 {plan.symbol}</span>
+                          <span>预算 {formatCurrency(plan.totalBudget, '¥ ')}</span>
+                          <span>更新于 {formatPlanTimeLabel(plan.updatedAt || plan.createdAt)}</span>
+                        </div>
+                      </div>
+                      <div className="text-sm font-semibold text-slate-500">
+                        {isActive ? '当前策略' : '点击查看'}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+              还没有已创建的策略。先进入“新建策略”页创建一条，首页才会出现可切换的策略列表。
+            </div>
+          )}
+        </Card>
+
         <Card>
           <SectionHeading
             eyebrow="Watchlist"
@@ -1181,6 +1293,11 @@ export function HomeExperience({ links, inPagesDir = false }) {
               <div className="mt-1 text-sm text-slate-500">
                 策略在“新建建仓计划”页面创建，首页只读查看执行配置。
               </div>
+              {planState?.name ? (
+                <div className="mt-1 text-sm text-slate-500">
+                  当前策略 {planState.name}
+                </div>
+              ) : null}
               <div className="mt-1 text-sm text-slate-500">
                 当前观察标的 {selectedFund?.code || '--'} · {formatFundPrice(currentFundPrice, selectedFundCurrency)}
               </div>

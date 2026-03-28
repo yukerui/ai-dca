@@ -4,7 +4,7 @@ import { formatCurrency, formatPercent } from '../app/accumulation.js';
 import { readHomeDashboardState } from '../app/homeDashboard.js';
 import { loadLatestNasdaqPrices, loadNasdaqDailySeries } from '../app/nasdaqPrices.js';
 import { persistPlanState, readPlanState } from '../app/plan.js';
-import { Card, Field, NumberInput, PageHero, PageShell, Pill, SectionHeading, SelectField, cx, primaryButtonClass, secondaryButtonClass } from '../components/experience-ui.jsx';
+import { Card, Field, NumberInput, PageHero, PageShell, Pill, SectionHeading, SelectField, TextInput, cx, primaryButtonClass, secondaryButtonClass } from '../components/experience-ui.jsx';
 
 const BENCHMARK_CODE = 'nas-daq100';
 const frequencyOptions = ['每日', '每周', '每月', '每季'];
@@ -200,7 +200,17 @@ function formatFundPrice(value, currency = '¥') {
 
 export function NewPlanExperience({ links, inPagesDir = false }) {
   const dashboardState = readHomeDashboardState();
-  const [state, setState] = useState(() => readPlanState());
+  const [state, setState] = useState(() => {
+    const template = readPlanState();
+    return {
+      ...template,
+      id: '',
+      name: '',
+      isConfigured: false,
+      createdAt: '',
+      updatedAt: ''
+    };
+  });
   const [marketEntries, setMarketEntries] = useState([]);
   const [marketError, setMarketError] = useState('');
   const [dailySeriesState, setDailySeriesState] = useState({
@@ -359,7 +369,6 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
     () => strategyOptions.find((option) => option.key === selectedStrategy) || strategyOptions[0],
     [selectedStrategy]
   );
-  const hasExistingPlan = Boolean(state.isConfigured);
   const computed = useMemo(
     () => (selectedStrategy === 'peak-drawdown' ? buildFixedDrawdownPlan(state) : buildMovingAverageTemplatePlan(state)),
     [selectedStrategy, state]
@@ -374,7 +383,7 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
       ...state,
       selectedStrategy,
       isConfigured: true
-    }, computed);
+    }, computed, { mode: 'create', activate: true });
 
     window.location.href = links.home;
   }
@@ -407,6 +416,14 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
               ) : null}
 
               <div className="mt-6 space-y-5">
+                <Field label="策略名称" helper="创建后会出现在首页的策略列表中。">
+                  <TextInput
+                    placeholder="例如：513100 固定回撤计划"
+                    value={state.name || ''}
+                    onChange={(event) => setState((current) => ({ ...current, name: event.target.value }))}
+                  />
+                </Field>
+
                 <Field className="min-w-0" label="资产标的" helper="与首页共用同一套纳指 ETF 标的池。">
                   {marketEntries.length ? (
                     <SelectField
@@ -651,7 +668,7 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
             <a className={cx(secondaryButtonClass, 'w-full sm:w-auto')} href={links.home}>取消</a>
             <button className={cx(primaryButtonClass, 'w-full sm:w-auto')} type="button" onClick={handleCreatePlan}>
               <Save className="h-4 w-4" />
-              {hasExistingPlan ? '保存策略并返回总览' : '确认创建并返回总览'}
+              确认创建并返回总览
               <ArrowRight className="h-4 w-4" />
             </button>
           </div>
