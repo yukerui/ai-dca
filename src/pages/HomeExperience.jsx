@@ -4,7 +4,7 @@ import { formatCurrency, formatPercent, readAccumulationState } from '../app/acc
 import { exportHomeDashboardState, importHomeDashboardState, normalizeHomeDashboardState, persistHomeDashboardState, readHomeDashboardState } from '../app/homeDashboard.js';
 import { formatPriceAsOf, loadLatestNasdaqPrices, loadNasdaqDailySeries, loadNasdaqMinuteSnapshot } from '../app/nasdaqPrices.js';
 import { readPlanState } from '../app/plan.js';
-import { Card, PageHero, PageShell, Pill, SectionHeading, SelectField, StatCard, cx, primaryButtonClass, secondaryButtonClass, subtleButtonClass } from '../components/experience-ui.jsx';
+import { Card, PageHero, PageShell, Pill, SectionHeading, SelectField, StatCard, cx, primaryButtonClass, subtleButtonClass } from '../components/experience-ui.jsx';
 
 const BENCHMARK_CODE = 'nas-daq100';
 const DEFAULT_WATCHLIST_CODES = [BENCHMARK_CODE, '513100', '159501', '159660'];
@@ -506,7 +506,6 @@ export function HomeExperience({ links, inPagesDir = false }) {
   const [marketError, setMarketError] = useState('');
   const [watchlistCodes, setWatchlistCodes] = useState(dashboardState.watchlistCodes);
   const [selectedCode, setSelectedCode] = useState(dashboardState.selectedCode);
-  const [selectedStrategy, setSelectedStrategy] = useState(dashboardState.selectedStrategy);
   const [pendingCode, setPendingCode] = useState('');
   const [minuteSnapshot, setMinuteSnapshot] = useState(null);
   const [fifteenMinuteSnapshot, setFifteenMinuteSnapshot] = useState(null);
@@ -519,6 +518,8 @@ export function HomeExperience({ links, inPagesDir = false }) {
   const [timeframe, setTimeframe] = useState('1m');
   const [activeBarId, setActiveBarId] = useState('');
   const importInputRef = useRef(null);
+  const selectedStrategy = planState.selectedStrategy || 'ma120-risk';
+  const hasConfiguredPlan = Boolean(planState.isConfigured);
 
   useEffect(() => {
     let cancelled = false;
@@ -625,10 +626,9 @@ export function HomeExperience({ links, inPagesDir = false }) {
 
     persistHomeDashboardState({
       watchlistCodes: visibleWatchlistCodes,
-      selectedCode,
-      selectedStrategy
+      selectedCode
     });
-  }, [marketEntries.length, selectedCode, selectedStrategy, visibleWatchlistCodes]);
+  }, [marketEntries.length, selectedCode, visibleWatchlistCodes]);
 
   const selectedFund = useMemo(() => marketByCode.get(selectedCode) || null, [marketByCode, selectedCode]);
   const benchmarkFund = useMemo(
@@ -1000,7 +1000,6 @@ export function HomeExperience({ links, inPagesDir = false }) {
       });
       setWatchlistCodes(imported.watchlistCodes);
       setSelectedCode(imported.selectedCode);
-      setSelectedStrategy(imported.selectedStrategy);
       setWatchlistNotice(`已导入 ${imported.watchlistCodes.length} 个自选基金。`);
       setWatchlistNoticeTone('emerald');
     } catch (error) {
@@ -1026,16 +1025,15 @@ export function HomeExperience({ links, inPagesDir = false }) {
         eyebrow="Strategy Dashboard"
         title="QQQ 建仓策略总览"
         badges={[
-          <Pill key="status" tone="indigo">运行中</Pill>,
+          <Pill key="status" tone="indigo">{hasConfiguredPlan ? '已创建策略' : '待创建策略'}</Pill>,
           <Pill key="strategy" tone="slate">{activeStrategyOption.shortLabel}</Pill>,
           <Pill key="layers" tone="slate">{strategyPlan.layers.length} 层建仓</Pill>
         ]}
         actions={
           <>
-            <a className={secondaryButtonClass} href={links.accumEdit}>修改配置</a>
             <a className={primaryButtonClass} href={links.accumNew}>
               <Plus className="h-4 w-4" />
-              新建建仓计划
+              {hasConfiguredPlan ? '重设建仓计划' : '创建建仓计划'}
             </a>
           </>
         }
@@ -1181,6 +1179,9 @@ export function HomeExperience({ links, inPagesDir = false }) {
               <div className="mt-1 text-lg font-bold text-slate-800">{activeStrategyOption.label}</div>
               <div className="mt-1 text-sm text-slate-500">{activeStrategyOption.note}</div>
               <div className="mt-1 text-sm text-slate-500">
+                策略在“新建建仓计划”页面创建，首页只读查看执行配置。
+              </div>
+              <div className="mt-1 text-sm text-slate-500">
                 当前观察标的 {selectedFund?.code || '--'} · {formatFundPrice(currentFundPrice, selectedFundCurrency)}
               </div>
               <div className="mt-1 text-sm text-slate-500">
@@ -1188,21 +1189,8 @@ export function HomeExperience({ links, inPagesDir = false }) {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {STRATEGY_OPTIONS.map((option) => (
-                <button
-                  key={option.key}
-                  className={cx(
-                    'rounded-full px-4 py-2 text-sm font-semibold transition-colors',
-                    selectedStrategy === option.key
-                      ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  )}
-                  type="button"
-                  onClick={() => setSelectedStrategy(option.key)}
-                >
-                  {option.shortLabel}
-                </button>
-              ))}
+              <Pill tone="indigo">{activeStrategyOption.shortLabel}</Pill>
+              <Pill tone="slate">{hasConfiguredPlan ? '只读展示' : '使用默认模板预览'}</Pill>
             </div>
           </div>
         </Card>

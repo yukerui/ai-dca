@@ -359,21 +359,25 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
     () => strategyOptions.find((option) => option.key === selectedStrategy) || strategyOptions[0],
     [selectedStrategy]
   );
+  const hasExistingPlan = Boolean(state.isConfigured);
   const computed = useMemo(
     () => (selectedStrategy === 'peak-drawdown' ? buildFixedDrawdownPlan(state) : buildMovingAverageTemplatePlan(state)),
     [selectedStrategy, state]
   );
 
-  useEffect(() => {
-    persistPlanState({
-      ...state,
-      selectedStrategy
-    }, computed);
-  }, [computed, selectedStrategy, state]);
-
   const strategySummary = selectedStrategy === 'peak-drawdown'
     ? `按 ${benchmarkFund?.code || BENCHMARK_CODE} 的阶段高点 ${formatFundPrice(computed.anchorPrice, benchmarkCurrency)} 向下拆成 8 档固定回撤。`
     : `按 ${benchmarkFund?.code || BENCHMARK_CODE} 的 MA120 触发价 ${formatFundPrice(computed.anchorPrice, benchmarkCurrency)} 和 MA200 风控价 ${formatFundPrice(computed.riskPrice, benchmarkCurrency)} 生成分层。`;
+
+  function handleCreatePlan() {
+    persistPlanState({
+      ...state,
+      selectedStrategy,
+      isConfigured: true
+    }, computed);
+
+    window.location.href = links.home;
+  }
 
   return (
     <PageShell>
@@ -382,7 +386,7 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
         backLabel="返回策略总览"
         eyebrow="New Strategy Plan"
         title="新建建仓计划"
-        description="使用和首页一致的纳指 ETF 标的池，按均线分层或固定回撤模板一次把预算、现金留存和执行计划配置清楚。"
+        description="在这里创建建仓策略，选择均线分层或固定回撤模板。创建完成后回到首页只读查看，不在首页直接修改。"
         badges={[
           <Pill key="symbol" tone="indigo">{selectedFund?.code || state.symbol || '未选择标的'}</Pill>,
           <Pill key="benchmark" tone="slate">{benchmarkFund?.code || BENCHMARK_CODE}</Pill>,
@@ -493,6 +497,9 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
                   <div className="mt-2 text-lg font-bold text-indigo-700">{activeStrategy.label}</div>
                   <div className="mt-2 text-sm font-semibold text-slate-700">参考基准 {benchmarkFund?.name || BENCHMARK_CODE}</div>
                   <p className="mt-3 text-sm leading-6 text-slate-500">{strategySummary}</p>
+                  <div className="mt-4 inline-flex rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500">
+                    首页仅查看策略结果，如需调整请回到本页重新创建
+                  </div>
                 </div>
             </Card>
 
@@ -642,11 +649,11 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
           </div>
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
             <a className={cx(secondaryButtonClass, 'w-full sm:w-auto')} href={links.home}>取消</a>
-            <a className={cx(primaryButtonClass, 'w-full sm:w-auto')} href={links.home}>
+            <button className={cx(primaryButtonClass, 'w-full sm:w-auto')} type="button" onClick={handleCreatePlan}>
               <Save className="h-4 w-4" />
-              确认创建
+              {hasExistingPlan ? '保存策略并返回总览' : '确认创建并返回总览'}
               <ArrowRight className="h-4 w-4" />
-            </a>
+            </button>
           </div>
         </div>
       </div>
