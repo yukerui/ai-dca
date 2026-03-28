@@ -1169,16 +1169,13 @@ export function HomeExperience({ links, inPagesDir = false }) {
                   <Pill tone="indigo">基准 {benchmarkFund?.code || BENCHMARK_CODE}</Pill>
                   {selectedStrategy === 'peak-drawdown' ? (
                     <>
-                      <Pill tone="violet">阶段高点</Pill>
-                      <Pill tone="slate">{formatFundPrice(strategyPlan.anchorPrice, benchmarkCurrency)}</Pill>
+                      <Pill tone="violet">阶段高点 {formatFundPrice(strategyPlan.anchorPrice, benchmarkCurrency)}</Pill>
                       <Pill tone="amber">固定回撤 8 档</Pill>
                     </>
                   ) : (
                     <>
-                      <Pill tone="violet">MA120 触发</Pill>
-                      <Pill tone="slate">{formatFundPrice(strategyTriggerPrice, benchmarkCurrency)}</Pill>
-                      <Pill tone="amber">MA200 风控</Pill>
-                      <Pill tone="slate">{formatFundPrice(riskControlPrice, benchmarkCurrency)}</Pill>
+                      <Pill tone="violet">MA120 触发 {formatFundPrice(strategyTriggerPrice, benchmarkCurrency)}</Pill>
+                      <Pill tone="amber">MA200 风控 {formatFundPrice(riskControlPrice, benchmarkCurrency)}</Pill>
                     </>
                   )}
                 </div>
