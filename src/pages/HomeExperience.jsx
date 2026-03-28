@@ -1331,7 +1331,49 @@ export function HomeExperience({ links, inPagesDir = false }) {
               <Pill tone="slate">当前标的现价 {formatFundPrice(strategyDisplayCurrentPrice, strategyDisplayCurrency)}</Pill>
               <Pill tone="emerald">已完成 {completedLayerCount}/{executionLayers.length} 档</Pill>
             </div>
-            <div className="mt-5 overflow-x-auto rounded-2xl border border-slate-200">
+            <div className="mt-5 space-y-3 md:hidden">
+              {executionLayers.map((layer) => (
+                <div
+                  key={layer.id}
+                  className={cx(
+                    'rounded-[24px] border p-4 shadow-sm',
+                    layer.progressState === 'completed'
+                      ? 'border-emerald-200 bg-emerald-50/70'
+                      : layer.progressState === 'next'
+                        ? 'border-indigo-200 bg-indigo-50/70'
+                        : 'border-slate-200 bg-slate-50/80'
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                        第 {String(layer.order).padStart(2, '0')} 档
+                      </div>
+                      <div className="mt-1 text-sm font-semibold text-slate-900">{layer.signal}</div>
+                    </div>
+                    <Pill tone={layer.progressTone}>{layer.progressLabel}</Pill>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 rounded-2xl bg-white/80 p-3 sm:grid-cols-3">
+                    <div>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">触发价格</div>
+                      <div className="mt-1 text-sm font-semibold text-slate-900">{formatFundPrice(layer.price, strategyDisplayCurrency)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">累计跌幅</div>
+                      <div className="mt-1 text-sm font-semibold text-slate-900">
+                        {selectedStrategy === 'peak-drawdown' ? formatPercent(layer.drawdown, 1) : (layer.order === 1 ? '基准' : formatPercent(layer.drawdown, 1))}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">计划金额</div>
+                      <div className="mt-1 text-sm font-semibold text-slate-900">{formatCurrency(layer.amount)}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-5 hidden overflow-x-auto rounded-2xl border border-slate-200 md:block">
               <table className="min-w-[660px] w-full text-left text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50/80 text-xs uppercase text-slate-500">
                   <tr>
