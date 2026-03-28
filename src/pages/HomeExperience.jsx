@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Plus, Trash2, Upload } from 'lucide-react';
+import { ChevronDown, ChevronUp, Download, Plus, Trash2, Upload } from 'lucide-react';
 import { formatCurrency, formatPercent, readAccumulationState } from '../app/accumulation.js';
 import { exportHomeDashboardState, importHomeDashboardState, normalizeHomeDashboardState, persistHomeDashboardState, readHomeDashboardState } from '../app/homeDashboard.js';
 import { formatPriceAsOf, loadLatestNasdaqPrices, loadNasdaqDailySeries, loadNasdaqMinuteSnapshot } from '../app/nasdaqPrices.js';
@@ -506,6 +506,36 @@ function buildChartGeometry(displayBars = [], overlays = {}) {
   };
 }
 
+function MobileFoldSection({ eyebrow, title, summary, isOpen, onToggle, children }) {
+  return (
+    <Card className="p-4">
+      <button
+        className="flex w-full items-start justify-between gap-3 text-left"
+        type="button"
+        onClick={onToggle}
+      >
+        <div className="min-w-0">
+          {eyebrow ? <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{eyebrow}</div> : null}
+          <div className="mt-1 text-base font-bold text-slate-900">{title}</div>
+          {summary ? (
+            <div className="mt-2 min-w-0">
+              {typeof summary === 'string' ? (
+                <div className="text-sm leading-6 text-slate-500">{summary}</div>
+              ) : (
+                summary
+              )}
+            </div>
+          ) : null}
+        </div>
+        <span className="mt-1 inline-flex shrink-0 items-center justify-center rounded-full bg-slate-100 p-2 text-slate-500">
+          {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </span>
+      </button>
+      {isOpen ? <div className="mt-4">{children}</div> : null}
+    </Card>
+  );
+}
+
 export function HomeExperience({ links, inPagesDir = false }) {
   const accumulationState = readAccumulationState();
   const initialPlanState = readPlanState();
@@ -528,6 +558,15 @@ export function HomeExperience({ links, inPagesDir = false }) {
   const [watchlistNoticeTone, setWatchlistNoticeTone] = useState('slate');
   const [timeframe, setTimeframe] = useState('1m');
   const [activeBarId, setActiveBarId] = useState('');
+  const [mobilePanels, setMobilePanels] = useState({
+    price: true,
+    execution: true,
+    watchlist: false,
+    plans: false,
+    capital: false
+  });
+  const [mobileChartExpanded, setMobileChartExpanded] = useState(false);
+  const [mobileExecutionExpanded, setMobileExecutionExpanded] = useState(false);
   const importInputRef = useRef(null);
   const planState = useMemo(
     () => planList.find((plan) => plan.id === activePlanId) || initialPlanState,
@@ -907,6 +946,10 @@ export function HomeExperience({ links, inPagesDir = false }) {
     () => executionLayers.filter((layer) => layer.progressState === 'completed').length,
     [executionLayers]
   );
+  const recentCompletedLayers = useMemo(
+    () => executionLayers.filter((layer) => layer.progressState === 'completed').slice(-2).reverse(),
+    [executionLayers]
+  );
   const isBelowRiskControl = currentBenchmarkPrice > 0 && riskControlPrice > 0 && currentBenchmarkPrice < riskControlPrice;
   const isBelowPeakExtreme = selectedStrategy === 'peak-drawdown' && currentBenchmarkPrice > 0 && strategyPlan.riskPrice > 0 && currentBenchmarkPrice <= strategyPlan.riskPrice;
 
@@ -984,6 +1027,46 @@ export function HomeExperience({ links, inPagesDir = false }) {
       asOf: formatPriceAsOf(selectedFund)
     };
   }, [activeBar, displayBars, selectedFund]);
+  const nextStepSuggestion = useMemo(() => {
+    if (!executionLayers.length) {
+      return {
+        title: '先创建一条建仓策略',
+        note: '创建后首页会按策略给出下一档和资金分配建议。'
+      };
+    }
+
+    if (nextTriggerLayer) {
+      if (completedLayerCount > 0) {
+        return {
+          title: `等待第 ${nextTriggerLayer.order} 档触发`,
+          note: `下一次参考买点 ${formatFundPrice(nextTriggerLayer.price, strategyDisplayCurrency)}，保持分批执行。`
+        };
+      }
+
+      return {
+        title: '首档尚未触发',
+        note: `当前先观察，等待价格回落到 ${formatFundPrice(nextTriggerLayer.price, strategyDisplayCurrency)} 附近。`
+      };
+    }
+
+    return selectedStrategy === 'peak-drawdown'
+      ? {
+          title: '已进入极端回撤区',
+          note: '后续更看重节奏控制和现金缓冲，不建议一次性打满。'
+        }
+      : {
+          title: '已进入最深防守区',
+          note: '继续以小步分批为主，优先保留机动现金。'
+        };
+  }, [completedLayerCount, executionLayers.length, nextTriggerLayer, selectedStrategy, strategyDisplayCurrency]);
+  const mobileProgressPct = executionLayers.length ? completedLayerCount / executionLayers.length * 100 : 0;
+
+  function toggleMobilePanel(panelKey) {
+    setMobilePanels((current) => ({
+      ...current,
+      [panelKey]: !current[panelKey]
+    }));
+  }
 
   function addWatchlistItem() {
     if (!pendingCode || visibleWatchlistCodes.includes(pendingCode)) {
@@ -1084,6 +1167,605 @@ export function HomeExperience({ links, inPagesDir = false }) {
       />
 
       <div className="mx-auto max-w-6xl space-y-6 px-6 pt-8">
+        <div className="space-y-4 md:hidden">
+          <Card className="overflow-hidden border-0 bg-gradient-to-br from-indigo-600 via-indigo-500 to-sky-500 p-0 text-white shadow-xl shadow-indigo-200">
+            <div className="p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">当前执行策略</div>
+                  <div className="mt-1 break-words text-2xl font-extrabold">{planState?.name || activeStrategyOption.label}</div>
+                  <div className="mt-2 text-sm leading-6 text-indigo-100">
+                    {selectedFund?.code || '--'} · {selectedFund?.name || '未选择观察标的'}
+                  </div>
+                </div>
+                <span className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white">
+                  {activeStrategyOption.shortLabel}
+                </span>
+              </div>
+
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-[22px] bg-white/12 px-4 py-3 backdrop-blur-sm">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">当前价格</div>
+                  <div className="mt-1 text-2xl font-extrabold">
+                    {formatFundPrice(strategyDisplayCurrentPrice, strategyDisplayCurrency)}
+                  </div>
+                </div>
+                <div className="rounded-[22px] bg-white/12 px-4 py-3 backdrop-blur-sm">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">下一次触发</div>
+                  <div className="mt-1 text-2xl font-extrabold">
+                    {nextTriggerLayer ? formatFundPrice(nextBuyPrice, strategyDisplayCurrency) : '已到深水区'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between text-sm font-semibold text-white/90">
+                <span>已完成层级</span>
+                <span>{completedLayerCount}/{executionLayers.length || 0}</span>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/15">
+                <div
+                  className="h-full rounded-full bg-emerald-300"
+                  style={{ width: `${Math.max(Math.min(mobileProgressPct, 100), 0)}%` }}
+                />
+              </div>
+
+              <div className="mt-4 rounded-[24px] bg-white/12 px-4 py-3 backdrop-blur-sm">
+                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">下一步建议</div>
+                <div className="mt-1 text-sm font-semibold text-white">{nextStepSuggestion.title}</div>
+                <div className="mt-1 text-sm leading-6 text-indigo-100">{nextStepSuggestion.note}</div>
+              </div>
+            </div>
+          </Card>
+
+          <MobileFoldSection
+            eyebrow="Price Pulse"
+            title="价格走势"
+            summary={selectedFund && pricePulse ? (
+              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                <span className="font-semibold text-slate-800">{selectedFund.code}</span>
+                <span>{formatFundPrice(pricePulse.latestPrice, selectedFundCurrency)}</span>
+                <span className={pricePulse.changePct >= 0 ? 'font-semibold text-emerald-600' : 'font-semibold text-rose-600'}>
+                  {formatPercent(pricePulse.changePct, 2, true)}
+                </span>
+              </div>
+            ) : '当前还没有可展示的价格走势数据。'}
+            isOpen={mobilePanels.price}
+            onToggle={() => toggleMobilePanel('price')}
+          >
+            {selectedFund && pricePulse ? (
+              <div className="space-y-4">
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-end justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">当前价格</div>
+                      <div className="mt-1 text-2xl font-extrabold text-slate-900">{formatFundPrice(pricePulse.latestPrice, selectedFundCurrency)}</div>
+                    </div>
+                    <div className={cx('text-sm font-semibold', pricePulse.changePct >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                      {formatPercent(pricePulse.changePct, 2, true)}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 rounded-full bg-slate-100 p-1">
+                    {TIMEFRAME_OPTIONS.map((option) => (
+                      <button
+                        key={option.key}
+                        className={cx(
+                          'rounded-full px-3 py-1.5 text-xs font-semibold transition-colors',
+                          timeframe === option.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                        )}
+                        type="button"
+                        onClick={() => setTimeframe(option.key)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {mobileChartExpanded ? (
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">成交量</div>
+                      <div className="mt-1 text-sm font-semibold text-slate-900">{pricePulse.volumeMetricValue}</div>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">MA120</div>
+                      <div className="mt-1 text-sm font-semibold text-violet-600">{formatRawNumber(activeMa120)}</div>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">MA200</div>
+                      <div className="mt-1 text-sm font-semibold text-amber-600">{formatRawNumber(activeMa200)}</div>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="relative min-w-0 overflow-hidden rounded-[24px] border border-slate-200 bg-white">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.12),_transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.08),_transparent_32%)]" />
+                  <svg className={cx('relative w-full', mobileChartExpanded ? 'h-[320px]' : 'h-[200px]')} preserveAspectRatio="none" viewBox="0 0 100 100">
+                    <line stroke="rgba(148,163,184,0.16)" strokeDasharray="1.5 2.5" strokeWidth="0.4" x1="4" x2="96" y1="16" y2="16" />
+                    <line stroke="rgba(148,163,184,0.16)" strokeDasharray="1.5 2.5" strokeWidth="0.4" x1="4" x2="96" y1="32" y2="32" />
+                    <line stroke="rgba(148,163,184,0.16)" strokeDasharray="1.5 2.5" strokeWidth="0.4" x1="4" x2="96" y1="48" y2="48" />
+                    <line stroke="rgba(148,163,184,0.16)" strokeDasharray="1.5 2.5" strokeWidth="0.4" x1="4" x2="96" y1="64" y2="64" />
+                    <line stroke="rgba(148,163,184,0.2)" strokeWidth="0.5" x1="4" x2="96" y1="79" y2="79" />
+
+                    {chartGeometry.volumeBars.map((bar) => (
+                      <rect
+                        key={bar.id}
+                        fill={bar.rising ? 'rgba(16,185,129,0.22)' : 'rgba(244,63,94,0.18)'}
+                        height={bar.height}
+                        rx="0.25"
+                        width={Math.max(bar.width, 1.2)}
+                        x={bar.x}
+                        y={bar.y}
+                      />
+                    ))}
+
+                    {chartGeometry.ma120Segments.map((segment, index) => (
+                      <polyline
+                        key={`mobile-ma120-${index}`}
+                        fill="none"
+                        points={segment}
+                        stroke="#7c3aed"
+                        strokeWidth={timeframe === '1d' ? '1.6' : '1.2'}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    ))}
+
+                    {chartGeometry.ma200Segments.map((segment, index) => (
+                      <polyline
+                        key={`mobile-ma200-${index}`}
+                        fill="none"
+                        points={segment}
+                        stroke="#f59e0b"
+                        strokeWidth={timeframe === '1d' ? '1.6' : '1.2'}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    ))}
+
+                    {chartGeometry.candles.map((candle) => (
+                      <g key={`mobile-${candle.id}`}>
+                        <line
+                          stroke={candle.rising ? '#10b981' : '#f43f5e'}
+                          strokeWidth="0.7"
+                          x1={candle.x}
+                          x2={candle.x}
+                          y1={candle.wickTop}
+                          y2={candle.wickBottom}
+                        />
+                        <rect
+                          fill={candle.rising ? '#10b981' : '#f43f5e'}
+                          height={candle.bodyHeight}
+                          rx="0.35"
+                          width={Math.max(candle.hitBoxWidth > 5 ? 1.9 : 1.4, 1.2)}
+                          x={candle.bodyX}
+                          y={candle.bodyY}
+                        />
+                        <rect
+                          fill="transparent"
+                          height="100"
+                          width={candle.hitBoxWidth}
+                          x={candle.hitBoxX}
+                          y="0"
+                          onClick={() => setActiveBarId(candle.id)}
+                        />
+                      </g>
+                    ))}
+
+                    {activeCandle && Number.isFinite(activeCloseY) ? (
+                      <g>
+                        <line stroke="rgba(15,23,42,0.28)" strokeDasharray="1.8 2.2" strokeWidth="0.5" x1={activeCandle.x} x2={activeCandle.x} y1="6" y2="96" />
+                        <line stroke="rgba(15,23,42,0.18)" strokeDasharray="1.8 2.2" strokeWidth="0.5" x1="4" x2="96" y1={activeCloseY} y2={activeCloseY} />
+                        <circle cx={activeCandle.x} cy={activeCloseY} fill="#312e81" r="1.2" />
+                      </g>
+                    ) : null}
+                  </svg>
+
+                  <div className="pointer-events-none absolute left-3 top-3 right-3 flex items-center justify-between gap-3 text-[10px] font-semibold">
+                    <span className="truncate rounded-full bg-slate-900 px-2.5 py-1 text-white">{selectedFund.code}</span>
+                    <span className="truncate rounded-full bg-white/95 px-2.5 py-1 text-slate-600">{pricePulse.asOf || minuteSnapshot?.date || ''}</span>
+                  </div>
+                </div>
+
+                {mobileChartExpanded ? (
+                  <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="font-semibold text-slate-800">{activeBar?.longLabel || selectedFund.name}</span>
+                      <span>开 {formatRawNumber(activeBar?.open)}</span>
+                      <span>高 {formatRawNumber(activeBar?.high)}</span>
+                      <span>低 {formatRawNumber(activeBar?.low)}</span>
+                      <span>收 {formatRawNumber(activeBar?.close)}</span>
+                    </div>
+                  </div>
+                ) : null}
+
+                <button
+                  className={cx(subtleButtonClass, 'w-full')}
+                  type="button"
+                  onClick={() => setMobileChartExpanded((current) => !current)}
+                >
+                  {mobileChartExpanded ? '收起完整 K 线' : '展开完整 K 线'}
+                </button>
+              </div>
+            ) : (
+              <div className="rounded-[20px] border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                {pulseError || marketError
+                  ? `价格走势加载失败：${pulseError || marketError}`
+                  : isLoadingPulse
+                    ? '正在加载价格走势数据...'
+                    : '请选择一个自选基金后查看价格走势。'}
+              </div>
+            )}
+          </MobileFoldSection>
+
+          <MobileFoldSection
+            eyebrow="Execution"
+            title="建仓计划详情"
+            summary={
+              <div className="space-y-1 text-sm text-slate-500">
+                <div>已完成 {completedLayerCount}/{executionLayers.length} 档</div>
+                <div>{nextTriggerLayer ? `下一档参考价 ${formatFundPrice(nextTriggerLayer.price, strategyDisplayCurrency)}` : '当前已经进入最深触发区'}</div>
+              </div>
+            }
+            isOpen={mobilePanels.execution}
+            onToggle={() => toggleMobilePanel('execution')}
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-[20px] bg-slate-50 px-4 py-3">
+                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">当前价格</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900">{formatFundPrice(strategyDisplayCurrentPrice, strategyDisplayCurrency)}</div>
+              </div>
+              <div className="rounded-[20px] bg-slate-50 px-4 py-3">
+                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">参考基准</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900">{benchmarkFund?.code || BENCHMARK_CODE}</div>
+              </div>
+            </div>
+
+            {nextTriggerLayer ? (
+              <div className="mt-4 rounded-[24px] border border-indigo-200 bg-indigo-50/70 p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                      下一档
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">{nextTriggerLayer.signal}</div>
+                  </div>
+                  <Pill tone="indigo">待触发</Pill>
+                </div>
+                <div className="mt-4 grid gap-3 rounded-2xl bg-white/80 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">触发价格</div>
+                    <div className="text-sm font-semibold text-slate-900">{formatFundPrice(nextTriggerLayer.price, strategyDisplayCurrency)}</div>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">计划金额</div>
+                    <div className="text-sm font-semibold text-slate-900">{formatCurrency(nextTriggerLayer.amount)}</div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-[24px] border border-amber-200 bg-amber-50/80 px-4 py-4 text-sm text-amber-700">
+                当前已经进入最深触发区，后续更看重分批节奏和现金缓冲。
+              </div>
+            )}
+
+            {recentCompletedLayers.length ? (
+              <div className="mt-4 rounded-[24px] border border-emerald-200 bg-emerald-50/70 p-4 shadow-sm">
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">最近已完成</div>
+                <div className="mt-3 space-y-2">
+                  {recentCompletedLayers.map((layer) => (
+                    <div key={`mobile-completed-${layer.id}`} className="flex items-center justify-between gap-3 rounded-2xl bg-white/80 px-3 py-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-slate-900">{layer.signal}</div>
+                        <div className="mt-1 text-xs text-slate-500">{formatFundPrice(layer.price, strategyDisplayCurrency)}</div>
+                      </div>
+                      <Pill tone="emerald">已完成</Pill>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-4">
+              <button
+                className={cx(subtleButtonClass, 'w-full')}
+                type="button"
+                onClick={() => setMobileExecutionExpanded((current) => !current)}
+              >
+                {mobileExecutionExpanded ? '收起完整档位' : '查看全部档位'}
+              </button>
+            </div>
+
+            {mobileExecutionExpanded ? (
+              <div className="mt-4 space-y-3">
+                {executionLayers.map((layer) => (
+                  <div
+                    key={`mobile-layer-${layer.id}`}
+                    className={cx(
+                      'rounded-[24px] border p-4 shadow-sm',
+                      layer.progressState === 'completed'
+                        ? 'border-emerald-200 bg-emerald-50/70'
+                        : layer.progressState === 'next'
+                          ? 'border-indigo-200 bg-indigo-50/70'
+                          : 'border-slate-200 bg-slate-50/80'
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                          第 {String(layer.order).padStart(2, '0')} 档
+                        </div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900">{layer.signal}</div>
+                      </div>
+                      <Pill tone={layer.progressTone}>{layer.progressLabel}</Pill>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 rounded-2xl bg-white/80 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">触发价格</div>
+                        <div className="text-sm font-semibold text-slate-900">{formatFundPrice(layer.price, strategyDisplayCurrency)}</div>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">累计跌幅</div>
+                        <div className="text-sm font-semibold text-slate-900">
+                          {selectedStrategy === 'peak-drawdown' ? formatPercent(layer.drawdown, 1) : (layer.order === 1 ? '基准' : formatPercent(layer.drawdown, 1))}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">计划金额</div>
+                        <div className="text-sm font-semibold text-slate-900">{formatCurrency(layer.amount)}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </MobileFoldSection>
+
+          <MobileFoldSection
+            eyebrow="Watchlist"
+            title="自选基金"
+            summary={selectedFund ? (
+              <div className="space-y-1 text-sm text-slate-500">
+                <div>
+                  <span className="font-semibold text-slate-800">{selectedFund.code}</span>
+                  {' · '}
+                  {formatFundPrice(currentFundPrice, selectedFundCurrency)}
+                </div>
+                <div>其余 {Math.max(watchlistItems.length - 1, 0)} 只基金收起管理</div>
+              </div>
+            ) : '当前没有选中的基金。'}
+            isOpen={mobilePanels.watchlist}
+            onToggle={() => toggleMobilePanel('watchlist')}
+          >
+            {watchlistNotice ? (
+              <div
+                className={cx(
+                  'rounded-2xl px-4 py-3 text-sm',
+                  watchlistNoticeTone === 'emerald'
+                    ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : watchlistNoticeTone === 'amber'
+                      ? 'border border-amber-200 bg-amber-50 text-amber-700'
+                      : 'border border-slate-200 bg-slate-50 text-slate-600'
+                )}
+              >
+                {watchlistNotice}
+              </div>
+            ) : null}
+
+            {marketError ? (
+              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                自选基金数据加载失败：{marketError}
+              </div>
+            ) : null}
+
+            <div className="mt-4 space-y-3">
+              {selectedFund ? (
+                <div className="rounded-[24px] border border-indigo-200 bg-indigo-50 px-4 py-4 shadow-sm shadow-indigo-100">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-lg font-semibold text-slate-900">{selectedFund.code}</div>
+                      <div className="mt-1 text-sm leading-6 text-slate-500">{selectedFund.name}</div>
+                    </div>
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-indigo-600">当前观察</span>
+                  </div>
+                  <div className="mt-4 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">现价</div>
+                  <div className="mt-1 text-xl font-bold text-indigo-700">{formatFundPrice(selectedFund.current_price, selectedFundCurrency)}</div>
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-3 gap-2">
+                <button className={cx(subtleButtonClass, 'px-2 text-xs')} type="button" onClick={exportWatchlistConfig}>
+                  导出配置
+                </button>
+                <button className={cx(subtleButtonClass, 'px-2 text-xs')} type="button" onClick={() => importInputRef.current?.click()}>
+                  导入配置
+                </button>
+                <button className={cx(subtleButtonClass, 'px-2 text-xs')} type="button" onClick={restoreDefaultWatchlist}>
+                  恢复默认
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <SelectField
+                  disabled={!addableEntries.length}
+                  options={addableEntries.map((entry) => ({
+                    label: `${entry.code} · ${entry.name}`,
+                    value: entry.code
+                  }))}
+                  value={pendingCode}
+                  onChange={(event) => setPendingCode(event.target.value)}
+                />
+                <button
+                  className={cx(primaryButtonClass, 'w-full')}
+                  disabled={!pendingCode || !addableEntries.length}
+                  type="button"
+                  onClick={addWatchlistItem}
+                >
+                  <Plus className="h-4 w-4 shrink-0" />
+                  新增自选
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {watchlistItems.map((item) => {
+                  const isActive = item.code === selectedCode;
+                  const itemCurrency = resolveMarketCurrency(item);
+                  return (
+                    <div
+                      key={`mobile-watch-${item.code}`}
+                      className={cx(
+                        'relative rounded-[22px] border px-4 py-3',
+                        isActive ? 'border-indigo-200 bg-indigo-50' : 'border-slate-200 bg-slate-50'
+                      )}
+                    >
+                      <button
+                        className="absolute inset-0 rounded-[22px]"
+                        type="button"
+                        aria-label={`切换到 ${item.code}`}
+                        onClick={() => setSelectedCode(item.code)}
+                      />
+                      <div className="relative z-10 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-slate-900">{item.code}</div>
+                          <div className="mt-1 truncate text-sm text-slate-500">{item.name}</div>
+                        </div>
+                        <button
+                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-500"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            removeWatchlistItem(item.code);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 shrink-0" />
+                        </button>
+                      </div>
+                      <div className="relative z-10 mt-3 flex items-center justify-between gap-3">
+                        <div className="text-sm font-semibold text-slate-900">{formatFundPrice(item.current_price, itemCurrency)}</div>
+                        <span className={cx('rounded-full px-3 py-1 text-xs font-semibold', isActive ? 'bg-white text-indigo-600' : 'bg-white text-slate-500')}>
+                          {isActive ? '当前观察' : '点击切换'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </MobileFoldSection>
+
+          <MobileFoldSection
+            eyebrow="Plans"
+            title="策略列表"
+            summary={planList.length ? (
+              <div className="space-y-1 text-sm text-slate-500">
+                <div className="font-semibold text-slate-800">{planState?.name || '当前策略'}</div>
+                <div>共 {planList.length} 条策略，首页只读切换查看</div>
+              </div>
+            ) : '当前还没有策略，先创建一条再回到首页查看。'}
+            isOpen={mobilePanels.plans}
+            onToggle={() => toggleMobilePanel('plans')}
+          >
+            <a className={cx(primaryButtonClass, 'w-full')} href={links.accumNew}>
+              <Plus className="h-4 w-4 shrink-0" />
+              新建策略
+            </a>
+
+            {planList.length ? (
+              <div className="mt-4 space-y-3">
+                {planList.map((plan) => {
+                  const isActive = plan.id === planState.id;
+                  return (
+                    <button
+                      key={`mobile-plan-${plan.id}`}
+                      className={cx(
+                        'w-full rounded-[22px] border px-4 py-4 text-left transition-all',
+                        isActive ? 'border-indigo-200 bg-indigo-50 shadow-sm shadow-indigo-100' : 'border-slate-200 bg-slate-50'
+                      )}
+                      type="button"
+                      onClick={() => handleSelectPlan(plan.id)}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="break-words text-sm font-semibold text-slate-900">{plan.name}</div>
+                          <div className="mt-2 text-xs leading-5 text-slate-500">
+                            标的 {plan.symbol} · 预算 {formatCurrency(plan.totalBudget, '¥ ')}
+                          </div>
+                        </div>
+                        {isActive ? <Pill tone="emerald">当前</Pill> : null}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                还没有已创建的策略。
+              </div>
+            )}
+          </MobileFoldSection>
+
+          <MobileFoldSection
+            eyebrow="Capital Mix"
+            title="资金配置模型"
+            summary={
+              <div className="space-y-1 text-sm text-slate-500">
+                <div>可投资 {formatCurrency(strategyPlan.investableCapital)}</div>
+                <div>预留现金 {formatCurrency(strategyPlan.reserveCapital)}</div>
+              </div>
+            }
+            isOpen={mobilePanels.capital}
+            onToggle={() => toggleMobilePanel('capital')}
+          >
+            <div className="rounded-[28px] border border-slate-200 bg-slate-50/80 p-4">
+              <div className="mx-auto flex flex-col items-center gap-3">
+                {strategyPlan.layers.map((layer, index) => {
+                  const maxWeight = strategyPlan.layers[strategyPlan.layers.length - 1]?.weight || 1;
+                  const widthPct = `${Math.min(100, 44 + layer.weight / maxWeight * 56)}%`;
+                  const bandClass = layer.tone === 'amber'
+                    ? 'from-amber-500 to-orange-500'
+                    : layer.tone === 'violet'
+                      ? 'from-violet-600 to-indigo-600'
+                      : index === strategyPlan.layers.length - 1
+                        ? 'from-indigo-600 to-sky-600'
+                        : 'from-slate-600 to-slate-500';
+
+                  return (
+                    <div key={`mobile-capital-${layer.id}`} className="w-full">
+                      <div
+                        className={cx(
+                          'mx-auto flex max-w-full items-center justify-between gap-3 rounded-[24px] bg-gradient-to-r px-4 py-3 text-white shadow-[0_10px_24px_rgba(15,23,42,0.10)] ring-1 ring-white/20',
+                          bandClass
+                        )}
+                        style={{ width: widthPct }}
+                      >
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/70">
+                            {selectedStrategy === 'peak-drawdown' ? `档位 ${String(layer.order).padStart(2, '0')}` : `第 ${layer.order} 档`}
+                          </div>
+                          <div className="mt-1 truncate text-sm font-extrabold">
+                            {selectedStrategy === 'peak-drawdown' ? layer.label : layer.signal}
+                          </div>
+                        </div>
+                        <div className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-sm font-extrabold">
+                          {`${formatRawNumber(layer.weight, 1)}x`}
+                        </div>
+                      </div>
+                      <div className="mx-auto mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-2 text-[11px] font-semibold text-slate-500">
+                        <span>{formatFundPrice(layer.price, strategyDisplayCurrency)}</span>
+                        <span>{selectedStrategy === 'peak-drawdown' ? formatPercent(layer.drawdown, 1) : (layer.order === 1 ? '基准层' : formatPercent(layer.drawdown, 1))}</span>
+                        <span>{formatCurrency(layer.amount)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </MobileFoldSection>
+        </div>
+
+        <div className="hidden space-y-6 md:block">
         <Card>
           <SectionHeading
             eyebrow="Plans"
@@ -1646,6 +2328,7 @@ export function HomeExperience({ links, inPagesDir = false }) {
               </div>
             </Card>
           </div>
+        </div>
         </div>
       </div>
     </PageShell>
