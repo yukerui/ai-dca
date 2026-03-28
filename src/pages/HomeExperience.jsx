@@ -1079,17 +1079,8 @@ export function HomeExperience({ links, inPagesDir = false }) {
         eyebrow="Strategy Dashboard"
         title="QQQ 建仓策略总览"
         badges={[
-          <Pill key="status" tone="indigo">{hasConfiguredPlan ? '已创建策略' : '待创建策略'}</Pill>,
-          <Pill key="strategy" tone="slate">{activeStrategyOption.shortLabel}</Pill>
+          <Pill key="status" tone="indigo">{hasConfiguredPlan ? '已创建策略' : '待创建策略'}</Pill>
         ]}
-        actions={
-          <>
-            <a className={primaryButtonClass} href={links.accumNew}>
-              <Plus className="h-4 w-4" />
-              {hasConfiguredPlan ? '重设建仓计划' : '创建建仓计划'}
-            </a>
-          </>
-        }
       />
 
       <div className="mx-auto max-w-6xl space-y-6 px-6 pt-8">
@@ -1098,12 +1089,6 @@ export function HomeExperience({ links, inPagesDir = false }) {
             eyebrow="Plans"
             title="策略列表"
             description="先在新建页创建策略，再回到这里切换查看。首页不直接修改策略模板。"
-            action={
-              <a className={primaryButtonClass} href={links.accumNew}>
-                <Plus className="h-4 w-4" />
-                新建策略
-              </a>
-            }
           />
 
           {planList.length ? (
@@ -1126,9 +1111,6 @@ export function HomeExperience({ links, inPagesDir = false }) {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="text-base font-semibold text-slate-900">{plan.name}</div>
-                          <Pill tone={plan.selectedStrategy === 'peak-drawdown' ? 'amber' : 'indigo'}>
-                            {plan.selectedStrategy === 'peak-drawdown' ? '固定回撤' : '均线分层'}
-                          </Pill>
                           {isActive ? <Pill tone="emerald">当前查看</Pill> : null}
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-500">
@@ -1329,7 +1311,6 @@ export function HomeExperience({ links, inPagesDir = false }) {
                   {selectedStrategy === 'peak-drawdown' ? (
                     <>
                       <Pill tone="violet">阶段高点 {formatFundPrice(displayStageHighPrice, strategyDisplayCurrency)}</Pill>
-                      <Pill tone="amber">固定回撤 8 档</Pill>
                     </>
                   ) : (
                     <>
