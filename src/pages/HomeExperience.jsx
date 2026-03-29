@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Download, Plus, Trash2, Upload } from 'lucide-react';
 import { formatCurrency, formatPercent, readAccumulationState } from '../app/accumulation.js';
 import { exportHomeDashboardState, importHomeDashboardState, normalizeHomeDashboardState, persistHomeDashboardState, readHomeDashboardState } from '../app/homeDashboard.js';
+import { formatMarketCode, formatMarketLabel, formatMarketName } from '../app/marketDisplay.js';
 import { formatPriceAsOf, loadLatestNasdaqPrices, loadNasdaqDailySeries, loadNasdaqMinuteSnapshot } from '../app/nasdaqPrices.js';
 import { readPlanList, readPlanState, setActivePlanId } from '../app/plan.js';
 import { getPrimaryTabs } from '../app/screens.js';
@@ -10,9 +11,9 @@ import { Card, PageHero, PageShell, PageTabs, Pill, SectionHeading, SelectField,
 const BENCHMARK_CODE = 'nas-daq100';
 const DEFAULT_WATCHLIST_CODES = [BENCHMARK_CODE, '513100', '159501', '159660'];
 const TIMEFRAME_OPTIONS = [
-  { key: '1m', label: '1m', note: '分时' },
-  { key: '15m', label: '15m', note: '短线' },
-  { key: '1d', label: '1d', note: '日线' }
+  { key: '1m', label: '1分', note: '分时' },
+  { key: '15m', label: '15分', note: '短线' },
+  { key: '1d', label: '日线', note: '日线' }
 ];
 const MAX_CHART_BARS = {
   '1m': 64,
@@ -22,9 +23,9 @@ const MAX_CHART_BARS = {
 const STRATEGY_OPTIONS = [
   {
     key: 'ma120-risk',
-    label: 'MA120/MA200',
+    label: '均线分层',
     shortLabel: '均线分层',
-    note: 'MA120 主触发 + MA200 风控'
+    note: '以120日均线为主触发，以200日均线为风控'
   },
   {
     key: 'peak-drawdown',
@@ -228,8 +229,8 @@ function buildNasdaqStrategyPlan({
   const baseLayers = [
     {
       id: 'ma120-base',
-      label: 'MA120 基准',
-      signal: '靠近 MA120',
+      label: '120日线基准',
+      signal: '靠近120日线',
       weight: 1,
       price: triggerPrice,
       drawdown: 0,
@@ -237,8 +238,8 @@ function buildNasdaqStrategyPlan({
     },
     {
       id: 'ma120-minus-5',
-      label: 'MA120 - 5%',
-      signal: '低于 MA120 5%',
+      label: '120日线下方 5%',
+      signal: '低于120日线 5%',
       weight: 1.5,
       price: triggerPrice > 0 ? triggerPrice * 0.95 : 0,
       drawdown: 5,
@@ -246,8 +247,8 @@ function buildNasdaqStrategyPlan({
     },
     {
       id: 'ma120-minus-10',
-      label: 'MA120 - 10%',
-      signal: '低于 MA120 10%',
+      label: '120日线下方 10%',
+      signal: '低于120日线 10%',
       weight: 2,
       price: triggerPrice > 0 ? triggerPrice * 0.9 : 0,
       drawdown: 10,
@@ -261,8 +262,8 @@ function buildNasdaqStrategyPlan({
     canUseIndependentRiskLayer
       ? {
           id: 'ma200-risk',
-          label: 'MA200 风控',
-          signal: '跌破 MA200',
+          label: '200日线风控',
+          signal: '跌破200日线',
           weight: 2.5,
           price: riskPrice,
           drawdown: triggerPrice > 0 ? Math.max((1 - riskPrice / triggerPrice) * 100, 0) : 0,
@@ -270,8 +271,8 @@ function buildNasdaqStrategyPlan({
         }
       : {
           id: 'ma120-minus-15',
-          label: 'MA120 - 15%',
-          signal: riskPrice > 0 ? 'MA200 仅作风控，不单列加仓' : '低于 MA120 15%',
+          label: '120日线下方 15%',
+          signal: riskPrice > 0 ? '200日线仅作风控，不单列加仓' : '低于120日线 15%',
           weight: 2.5,
           price: triggerPrice > 0 ? triggerPrice * 0.85 : 0,
           drawdown: 15,
@@ -698,6 +699,10 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
   );
   const selectedFundCurrency = resolveMarketCurrency(selectedFund);
   const benchmarkCurrency = resolveMarketCurrency(benchmarkFund);
+  const selectedFundCodeLabel = formatMarketCode(selectedFund?.code);
+  const selectedFundNameLabel = formatMarketName(selectedFund);
+  const benchmarkCodeLabel = formatMarketCode(benchmarkFund?.code || BENCHMARK_CODE);
+  const benchmarkNameLabel = formatMarketName(benchmarkFund || { code: BENCHMARK_CODE });
 
   useEffect(() => {
     if (!planState?.isConfigured || !planState.symbol || !marketByCode.has(planState.symbol)) {
@@ -1197,14 +1202,14 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
                     {activeStrategyOption.shortLabel}
                   </span>
                   <span className="rounded-full bg-white/12 px-3 py-1 text-xs font-semibold text-white/90">
-                    基准 {benchmarkFund?.code || BENCHMARK_CODE}
+                    基准 {benchmarkCodeLabel}
                   </span>
                 </div>
                 <div className="rounded-[22px] bg-white/12 px-4 py-3 backdrop-blur-sm">
                   <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">当前观察标的</div>
-                  <div className="mt-1 text-base font-semibold leading-6 text-white">{selectedFund?.code || '--'}</div>
-                  {selectedFund?.name ? (
-                    <div className="text-sm leading-6 text-indigo-100">{selectedFund.name}</div>
+                  <div className="mt-1 text-base font-semibold leading-6 text-white">{selectedFundCodeLabel || '--'}</div>
+                  {selectedFund ? (
+                    <div className="text-sm leading-6 text-indigo-100">{selectedFundNameLabel}</div>
                   ) : null}
                 </div>
               </div>
@@ -1249,7 +1254,7 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
           </Card>
 
           <MobileFoldSection
-            eyebrow="Plans"
+            eyebrow="策略列表"
             title="策略列表"
             summary={planList.length ? (
               <div className="space-y-1 text-sm text-slate-500">
@@ -1283,7 +1288,7 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
                         <div className="min-w-0">
                           <div className="break-words text-sm font-semibold text-slate-900">{plan.name}</div>
                           <div className="mt-2 text-xs leading-5 text-slate-500">
-                            标的 {plan.symbol}
+                            标的 {formatMarketCode(plan.symbol)}
                           </div>
                           <div className="text-xs leading-5 text-slate-500">
                             预算 {formatCurrency(plan.totalBudget, '¥ ')}
@@ -1303,11 +1308,11 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
           </MobileFoldSection>
 
           <MobileFoldSection
-            eyebrow="Price Pulse"
+            eyebrow="价格走势"
             title="价格走势"
             summary={selectedFund && pricePulse ? (
               <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                <span className="font-semibold text-slate-800">{selectedFund.code}</span>
+                <span className="font-semibold text-slate-800">{selectedFundCodeLabel}</span>
                 <span>{formatFundPrice(pricePulse.latestPrice, selectedFundCurrency)}</span>
                 <span className={pricePulse.changePct >= 0 ? 'font-semibold text-emerald-600' : 'font-semibold text-rose-600'}>
                   {formatPercent(pricePulse.changePct, 2, true)}
@@ -1354,11 +1359,11 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
                       <div className="mt-1 text-sm font-semibold text-slate-900">{pricePulse.volumeMetricValue}</div>
                     </div>
                     <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                      <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">MA120</div>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">120日线</div>
                       <div className="mt-1 text-sm font-semibold text-violet-600">{formatRawNumber(activeMa120)}</div>
                     </div>
                     <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                      <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">MA200</div>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">200日线</div>
                       <div className="mt-1 text-sm font-semibold text-amber-600">{formatRawNumber(activeMa200)}</div>
                     </div>
                   </div>
@@ -1448,7 +1453,7 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
                   </svg>
 
                   <div className="pointer-events-none absolute left-3 top-3 right-3 flex items-center justify-between gap-3 text-[10px] font-semibold">
-                    <span className="truncate rounded-full bg-slate-900 px-2.5 py-1 text-white">{selectedFund.code}</span>
+                    <span className="truncate rounded-full bg-slate-900 px-2.5 py-1 text-white">{selectedFundCodeLabel}</span>
                     <span className="truncate rounded-full bg-white/95 px-2.5 py-1 text-slate-600">{pricePulse.asOf || minuteSnapshot?.date || ''}</span>
                   </div>
                 </div>
@@ -1456,7 +1461,7 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
                 {mobileChartExpanded ? (
                   <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
                     <div className="flex flex-wrap items-center gap-3">
-                      <span className="font-semibold text-slate-800">{activeBar?.longLabel || selectedFund.name}</span>
+                      <span className="font-semibold text-slate-800">{activeBar?.longLabel || selectedFundNameLabel}</span>
                       <span>开 {formatRawNumber(activeBar?.open)}</span>
                       <span>高 {formatRawNumber(activeBar?.high)}</span>
                       <span>低 {formatRawNumber(activeBar?.low)}</span>
@@ -1470,7 +1475,7 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
                   type="button"
                   onClick={() => setMobileChartExpanded((current) => !current)}
                 >
-                  {mobileChartExpanded ? '收起完整 K 线' : '展开完整 K 线'}
+                  {mobileChartExpanded ? '收起完整图表' : '展开完整图表'}
                 </button>
               </div>
             ) : (
@@ -1479,13 +1484,13 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
                   ? `价格走势加载失败：${pulseError || marketError}`
                   : isLoadingPulse
                     ? '正在加载价格走势数据...'
-                    : '请选择一个自选基金后查看价格走势。'}
+                    : '请选择一个标的后查看价格走势。'}
               </div>
             )}
           </MobileFoldSection>
 
           <MobileFoldSection
-            eyebrow="Execution"
+            eyebrow="建仓计划"
             title="建仓计划详情"
             summary={
               <div className="space-y-1 text-sm text-slate-500">
@@ -1503,7 +1508,7 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
               </div>
               <div className="rounded-[20px] bg-slate-50 px-4 py-3">
                 <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">参考基准</div>
-                <div className="mt-1 text-sm font-semibold text-slate-900">{benchmarkFund?.code || BENCHMARK_CODE}</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900">{benchmarkCodeLabel}</div>
               </div>
             </div>
 
@@ -1609,7 +1614,7 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
           </MobileFoldSection>
 
           <MobileFoldSection
-            eyebrow="Capital Mix"
+            eyebrow="资金模型"
             title="资金配置模型"
             summary={
               <div className="space-y-1 text-sm text-slate-500">
@@ -1671,7 +1676,7 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
         <Card className="p-4 sm:p-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
-              <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Strategy Template</div>
+              <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">当前执行策略</div>
               <div className="mt-1 text-lg font-bold text-slate-800">{activeStrategyOption.label}</div>
               <div className="mt-1 text-sm text-slate-500">{activeStrategyOption.note}</div>
               <div className="mt-1 text-sm text-slate-500">
@@ -1684,12 +1689,14 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
               ) : null}
               <div className="mt-2 space-y-1 text-sm text-slate-500">
                 <div>当前观察标的</div>
-                <div>{selectedFund?.code || '--'}</div>
+                <div>{selectedFundCodeLabel || '--'}</div>
+                <div>{selectedFund ? selectedFundNameLabel : '--'}</div>
                 <div>{formatFundPrice(currentFundPrice, selectedFundCurrency)}</div>
               </div>
               <div className="mt-2 space-y-1 text-sm text-slate-500">
                 <div>参考基准</div>
-                <div>{benchmarkFund?.code || BENCHMARK_CODE}</div>
+                <div>{benchmarkCodeLabel}</div>
+                <div>{benchmarkNameLabel}</div>
                 <div>{formatFundPrice(currentBenchmarkPrice, benchmarkCurrency)}</div>
               </div>
             </div>
@@ -1702,7 +1709,7 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
 
         <Card>
           <SectionHeading
-            eyebrow="Plans"
+            eyebrow="策略列表"
             title="策略列表"
             description="先在新建页创建策略，再回到这里切换查看。首页不直接修改策略模板。"
             action={
@@ -1736,7 +1743,7 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
                           {isActive ? <Pill tone="emerald">当前查看</Pill> : null}
                         </div>
                         <div className="mt-2 space-y-1 text-sm text-slate-500">
-                          <div>标的 {plan.symbol}</div>
+                          <div>标的 {formatMarketCode(plan.symbol)}</div>
                           <div>预算 {formatCurrency(plan.totalBudget, '¥ ')}</div>
                         </div>
                       </div>
@@ -1756,36 +1763,36 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
         </Card>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard accent="indigo" eyebrow="Portfolio Budget" value={formatCurrency(strategyPlan.investableCapital)} note={selectedStrategy === 'peak-drawdown' ? '按阶段高点固定回撤 8 档分配预算' : '按 MA120 主触发策略分配的预算'} progress={Math.max(100 - reserveRatio, 0)} />
-          <StatCard eyebrow="Reserve Cash" value={formatCurrency(strategyPlan.reserveCapital)} note={selectedStrategy === 'peak-drawdown' ? (isBelowPeakExtreme ? '价格已进入第 8 档极端区。' : `${formatPercent(reserveRatio, 1)} 作为极端回撤缓冲`) : (isBelowRiskControl ? '价格已跌破 MA200，进入防守区。' : strategyPlan.usesIndependentRiskLayer ? `${formatPercent(reserveRatio, 1)} 作为 MA200 防守缓冲` : 'MA200 当前高于深水层，仅作趋势风控。')} />
+          <StatCard accent="indigo" eyebrow="可投入预算" value={formatCurrency(strategyPlan.investableCapital)} note={selectedStrategy === 'peak-drawdown' ? '按阶段高点固定回撤 8 档分配预算' : '按120日线主触发策略分配预算'} progress={Math.max(100 - reserveRatio, 0)} />
+          <StatCard eyebrow="预留现金" value={formatCurrency(strategyPlan.reserveCapital)} note={selectedStrategy === 'peak-drawdown' ? (isBelowPeakExtreme ? '价格已进入第 8 档极端区。' : `${formatPercent(reserveRatio, 1)} 作为极端回撤缓冲`) : (isBelowRiskControl ? '价格已跌破200日线，进入防守区。' : strategyPlan.usesIndependentRiskLayer ? `${formatPercent(reserveRatio, 1)} 作为200日线防守缓冲` : '200日线当前高于深水层，仅作趋势风控。')} />
           <StatCard
-            eyebrow="Next Trigger"
+            eyebrow="下一触发价"
             value={formatFundPrice(nextBuyPrice, strategyDisplayCurrency)}
             note={nextTriggerLayer ? (
               <>
-                <div>{benchmarkFund?.code || BENCHMARK_CODE} 信号</div>
-                <div>映射到 {selectedFund?.code || benchmarkFund?.code || BENCHMARK_CODE}</div>
+                <div>{benchmarkCodeLabel} 信号</div>
+                <div>映射到 {selectedFundCodeLabel || benchmarkCodeLabel}</div>
               </>
             ) : selectedStrategy === 'peak-drawdown' ? '当前已进入第 8 档极端区' : '当前已进入最深防守区'}
           />
-          <StatCard accent="emerald" eyebrow="Average Cost" value={formatFundPrice(displayStrategyPlan.averageCost, strategyDisplayCurrency)} note={selectedStrategy === 'peak-drawdown' ? `${benchmarkFund?.code || BENCHMARK_CODE} 固定跌幅 8 档映射` : `${benchmarkFund?.code || BENCHMARK_CODE} MA120 / MA200 映射`} />
+          <StatCard accent="emerald" eyebrow="估算均价" value={formatFundPrice(displayStrategyPlan.averageCost, strategyDisplayCurrency)} note={selectedStrategy === 'peak-drawdown' ? `${benchmarkCodeLabel} 固定跌幅 8 档映射` : `${benchmarkCodeLabel} 120日线 / 200日线映射`} />
 
           <Card className="min-w-0 md:col-span-2 xl:col-start-2 xl:col-span-3">
             <SectionHeading
-              eyebrow="Execution Map"
+              eyebrow="建仓计划"
               title="建仓计划详情"
               action={
                 <div className="flex flex-wrap items-start gap-2">
-                  <Pill tone="indigo">基准 {benchmarkFund?.code || BENCHMARK_CODE}</Pill>
-                  <Pill tone="slate">标的 {selectedFund?.code || '--'}</Pill>
+                  <Pill tone="indigo">基准 {benchmarkCodeLabel}</Pill>
+                  <Pill tone="slate">标的 {selectedFundCodeLabel || '--'}</Pill>
                   {selectedStrategy === 'peak-drawdown' ? (
                     <>
                       <Pill tone="violet">阶段高点 {formatFundPrice(displayStageHighPrice, strategyDisplayCurrency)}</Pill>
                     </>
                   ) : (
                     <>
-                      <Pill tone="violet">MA120 触发 {formatFundPrice(displayTriggerPrice, strategyDisplayCurrency)}</Pill>
-                      <Pill tone="amber">MA200 风控 {formatFundPrice(displayRiskControlPrice, strategyDisplayCurrency)}</Pill>
+                      <Pill tone="violet">120日线触发 {formatFundPrice(displayTriggerPrice, strategyDisplayCurrency)}</Pill>
+                      <Pill tone="amber">200日线风控 {formatFundPrice(displayRiskControlPrice, strategyDisplayCurrency)}</Pill>
                     </>
                   )}
                 </div>
@@ -1880,16 +1887,16 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,0.95fr)]">
           <Card className="min-w-0 overflow-hidden">
             <SectionHeading
-              eyebrow="Price Pulse"
+              eyebrow="价格走势"
               title="价格走势"
-              action={selectedFund ? <Pill tone="indigo">{selectedFund.code}</Pill> : null}
+              action={selectedFund ? <Pill tone="indigo">{selectedFundCodeLabel}</Pill> : null}
             />
 
             {selectedFund && pricePulse ? (
               <div className="mt-6 min-w-0 flex flex-col gap-5 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-100 md:p-6">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div className="space-y-1">
-                      <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">K-Line Monitor</div>
+                      <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">走势监测</div>
                       <div className="text-2xl font-extrabold text-slate-900">{formatFundPrice(pricePulse.latestPrice, selectedFundCurrency)}</div>
                       <div className={cx('text-sm font-semibold', pricePulse.changePct >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
                         {formatPercent(pricePulse.changePct, 2, true)}
@@ -1922,11 +1929,11 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
                             <div className="text-sm font-semibold text-slate-900">{pricePulse.volumeMetricValue}</div>
                           </div>
                           <div className="flex items-center justify-between gap-4 rounded-2xl bg-white px-3 py-2">
-                            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">MA120</div>
+                            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">120日线</div>
                             <div className="text-sm font-semibold text-violet-600">{formatRawNumber(activeMa120)}</div>
                           </div>
                           <div className="flex items-center justify-between gap-4 rounded-2xl bg-white px-3 py-2">
-                            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">MA200</div>
+                            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">200日线</div>
                             <div className="text-sm font-semibold text-amber-600">{formatRawNumber(activeMa200)}</div>
                           </div>
                         </div>
@@ -1936,13 +1943,13 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
 
                   <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
                     <div className="flex flex-wrap items-center gap-3">
-                      <span className="font-semibold text-slate-800">{activeBar?.longLabel || selectedFund.name}</span>
+                      <span className="font-semibold text-slate-800">{activeBar?.longLabel || selectedFundNameLabel}</span>
                       <span>开 {formatRawNumber(activeBar?.open)}</span>
                       <span>高 {formatRawNumber(activeBar?.high)}</span>
                       <span>低 {formatRawNumber(activeBar?.low)}</span>
                       <span>收 {formatRawNumber(activeBar?.close)}</span>
-                      <span>MA120 {formatRawNumber(activeMa120)}</span>
-                      <span>MA200 {formatRawNumber(activeMa200)}</span>
+                      <span>120日线 {formatRawNumber(activeMa120)}</span>
+                      <span>200日线 {formatRawNumber(activeMa200)}</span>
                     </div>
                   </div>
 
@@ -2030,9 +2037,9 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
                     </svg>
 
                     <div className="pointer-events-none absolute left-3 top-3 right-20 flex flex-wrap items-center gap-1.5 text-[10px] font-semibold sm:left-4 sm:top-4 sm:right-28 sm:gap-2 sm:text-[11px]">
-                      <span className="rounded-full bg-slate-900 px-3 py-1 text-white">{selectedFund.code}</span>
-                      <span className="rounded-full bg-violet-50 px-3 py-1 text-violet-700">MA120</span>
-                      <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700">MA200</span>
+                      <span className="rounded-full bg-slate-900 px-3 py-1 text-white">{selectedFundCodeLabel}</span>
+                      <span className="rounded-full bg-violet-50 px-3 py-1 text-violet-700">120日线</span>
+                      <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700">200日线</span>
                     </div>
                     <div className="pointer-events-none absolute right-3 top-3 max-w-[5.5rem] truncate rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-semibold text-slate-600 shadow-sm sm:right-4 sm:top-4 sm:max-w-none sm:px-3 sm:text-xs">
                       {pricePulse.asOf || minuteSnapshot?.date || ''}
@@ -2051,10 +2058,10 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
             ) : (
               <div className="mt-6 rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-sm text-slate-500">
                 {pulseError || marketError
-                  ? `价格脉冲加载失败：${pulseError || marketError}`
+                  ? `价格走势加载失败：${pulseError || marketError}`
                   : isLoadingPulse
-                    ? '正在加载所选基金的 K 线和历史快照数据...'
-                    : '请选择一个自选基金后查看 Price Pulse。'}
+                    ? '正在加载所选基金的价格走势和历史快照数据...'
+                    : '请选择一个标的后查看价格走势。'}
               </div>
             )}
           </Card>
@@ -2122,8 +2129,8 @@ export function HomeExperience({ links, inPagesDir = false, embedded = false }) 
   return (
     <PageShell>
       <PageHero
-        eyebrow="Strategy Dashboard"
-        title="QQQ 建仓策略总览"
+        eyebrow="建仓策略总览"
+        title="建仓策略总览"
         badges={[
           <Pill key="status" tone="indigo">{hasConfiguredPlan ? '已创建策略' : '待创建策略'}</Pill>
         ]}

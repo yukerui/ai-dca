@@ -1,13 +1,13 @@
 {
   "project_id": "4075224789216868860",
-  "project_title": "Stock Accumulation Calculator Dashboard",
+  "project_title": "股票建仓策略看板",
   "homepage_screen_id": "75a393ec1a2d424ebafa1d0e59402d26",
   "html_count": 7,
   "screenshot_count": 0,
   "screens": [
     {
       "screen_id": "75a393ec1a2d424ebafa1d0e59402d26",
-      "title": "QQQ 建仓策略总览",
+      "title": "建仓策略总览",
       "device": "DESKTOP",
       "page_url": "index.html",
       "screenshot_url": null,
@@ -47,7 +47,7 @@
     },
     {
       "screen_id": "5e3d43b9c2ea47f9b5d2be752bca564e",
-      "title": "基金切换收益助手",
+      "title": "基金切换收益分析",
       "device": "DESKTOP",
       "page_url": "pages/5e3d43b9c2ea47f9b5d2be752bca564e.html",
       "screenshot_url": null,

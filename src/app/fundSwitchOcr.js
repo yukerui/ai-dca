@@ -26,7 +26,7 @@ function ensureImageFile(file) {
   }
 
   if (!String(file.type || '').startsWith('image/')) {
-    throw new Error('当前仅支持图片上传，请使用 PNG、JPG、JPEG 或 WebP。');
+    throw new Error('当前仅支持图片上传，请使用常见图片格式。');
   }
 }
 
@@ -66,13 +66,13 @@ export async function recognizeFundSwitchFile(file, fallbackComparison, onProgre
       payload = JSON.parse(rawText);
     } catch (_error) {
       payload = {
-        error: response.ok ? 'OCR 服务返回了非 JSON 响应。' : rawText
+        error: response.ok ? '识别服务返回了非标准响应。' : rawText
       };
     }
   }
 
   if (!response.ok) {
-    throw new Error(payload.error || `OCR 服务请求失败: HTTP ${response.status}`);
+    throw new Error(payload.error || `识别服务请求失败：状态 ${response.status}`);
   }
 
   onProgress?.({

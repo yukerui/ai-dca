@@ -5,7 +5,7 @@ const DCA_KEY = 'aiDcaDcaState';
 export const frequencyOptions = ['每日', '每周', '每月', '每季'];
 
 export const defaultDcaState = {
-  symbol: 'QQQ',
+  symbol: '纳指基金',
   initialInvestment: 1500,
   recurringInvestment: 800,
   frequency: '每月',
@@ -41,6 +41,14 @@ function getCadenceLabel(frequency, executionDay) {
     default:
       return `每月 ${Math.max(Number(executionDay) || 1, 1)} 日执行`;
   }
+}
+
+function normalizeSavedSymbol(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized || normalized === 'QQQ') {
+    return defaultDcaState.symbol;
+  }
+  return normalized;
 }
 
 export function buildDcaProjection(state) {
@@ -81,7 +89,7 @@ export function readDcaState() {
     }
 
     return {
-      symbol: saved.symbol || defaultDcaState.symbol,
+      symbol: normalizeSavedSymbol(saved.symbol),
       initialInvestment: Number(saved.initialInvestment) || defaultDcaState.initialInvestment,
       recurringInvestment: Number(saved.recurringInvestment) || defaultDcaState.recurringInvestment,
       frequency: saved.frequency || defaultDcaState.frequency,
@@ -101,7 +109,7 @@ export function persistDcaState(state, computed = buildDcaProjection(state)) {
 
   const payload = {
     source: 'react-dca',
-    symbol: state.symbol || defaultDcaState.symbol,
+    symbol: normalizeSavedSymbol(state.symbol),
     initialInvestment: round(state.initialInvestment, 2),
     recurringInvestment: round(state.recurringInvestment, 2),
     frequency: state.frequency || defaultDcaState.frequency,

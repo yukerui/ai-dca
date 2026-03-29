@@ -43,7 +43,7 @@ export function AccumulationExperience({ links }) {
       <PageHero
         backHref={links.home}
         backLabel="返回策略总览"
-        eyebrow="Accumulation Config"
+        eyebrow="加仓配置"
         title="加仓配置"
         description="将建仓总预算、基准价和末层跌幅统一收进一个轻量编辑面板里，实时联动各层权重、入场位和平均成本。"
         badges={[
@@ -60,16 +60,16 @@ export function AccumulationExperience({ links }) {
 
       <div className="mx-auto max-w-6xl space-y-6 px-6 pt-8">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard accent="indigo" eyebrow="Total Capital" value={formatCurrency(state.totalCapital)} note="总预算会自动按各层权重拆分" />
-          <StatCard eyebrow="Average Cost" value={formatCurrency(computed.averageCost)} note="当前联动后的预估平均成本" />
-          <StatCard eyebrow="Total Shares" value={`${formatCurrency(computed.totalShares, '', 3)} 股`} note="按每层金额与价格反推出的份额" />
-          <StatCard accent="red" eyebrow="Max Drawdown" value={formatPercent(state.maxDrawdown, 2)} note="末层吃满的累计跌幅上限" />
+          <StatCard accent="indigo" eyebrow="总预算" value={formatCurrency(state.totalCapital)} note="总预算会自动按各层权重拆分" />
+          <StatCard eyebrow="平均成本" value={formatCurrency(computed.averageCost)} note="当前联动后的预估平均成本" />
+          <StatCard eyebrow="总份额" value={`${formatCurrency(computed.totalShares, '', 3)} 股`} note="按每层金额与价格反推出的份额" />
+          <StatCard accent="red" eyebrow="最大跌幅" value={formatPercent(state.maxDrawdown, 2)} note="末层吃满的累计跌幅上限" />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-5">
           <Card className="lg:col-span-2">
             <SectionHeading
-              eyebrow="Base Inputs"
+              eyebrow="基础参数"
               title="基本参数设置"
               description="优先确认可投入预算、首笔价格和末层跌幅，系统会据此反推每层的目标价与计划金额。"
             />
@@ -114,7 +114,7 @@ export function AccumulationExperience({ links }) {
 
           <Card className="lg:col-span-3">
             <SectionHeading
-              eyebrow="Layer Matrix"
+              eyebrow="层级矩阵"
               title="目标跌幅加仓点"
               description="每层权重改动都会立即影响目标跌幅、计划金额和预计份额。非首层可直接删除。"
               action={

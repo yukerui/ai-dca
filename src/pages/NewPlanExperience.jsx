@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowRight, Save } from 'lucide-react';
 import { formatCurrency, formatPercent } from '../app/accumulation.js';
 import { readHomeDashboardState } from '../app/homeDashboard.js';
+import { formatMarketCode, formatMarketLabel, formatMarketName } from '../app/marketDisplay.js';
 import { loadLatestNasdaqPrices, loadNasdaqDailySeries } from '../app/nasdaqPrices.js';
 import { persistPlanState, readPlanState } from '../app/plan.js';
 import { Card, Field, NumberInput, PageHero, PageShell, Pill, SectionHeading, SelectField, TextInput, cx, primaryButtonClass, secondaryButtonClass } from '../components/experience-ui.jsx';
@@ -12,7 +13,7 @@ const strategyOptions = [
   {
     key: 'ma120-risk',
     label: '均线分层',
-    note: 'MA120 主触发 + MA200 风控'
+    note: '以120日均线为主触发，以200日均线为风控'
   },
   {
     key: 'peak-drawdown',
@@ -75,24 +76,24 @@ function buildMovingAverageTemplatePlan(state) {
   const layers = [
     {
       id: 'ma120-base',
-      label: 'MA120 基准',
-      signal: '靠近 MA120',
+      label: '120日线基准',
+      signal: '靠近120日线',
       drawdown: 0,
       weight: 1,
       price: triggerPrice
     },
     {
       id: 'ma120-minus-5',
-      label: 'MA120 - 5%',
-      signal: '低于 MA120 5%',
+      label: '120日线下方 5%',
+      signal: '低于120日线 5%',
       drawdown: 5,
       weight: 1.5,
       price: triggerPrice > 0 ? triggerPrice * 0.95 : 0
     },
     {
       id: 'ma120-minus-10',
-      label: 'MA120 - 10%',
-      signal: '低于 MA120 10%',
+      label: '120日线下方 10%',
+      signal: '低于120日线 10%',
       drawdown: 10,
       weight: 2,
       price: triggerPrice > 0 ? triggerPrice * 0.9 : 0
@@ -100,8 +101,8 @@ function buildMovingAverageTemplatePlan(state) {
     usesRiskLayer
       ? {
           id: 'ma200-risk',
-          label: 'MA200 风控',
-          signal: '跌破 MA200',
+          label: '200日线风控',
+          signal: '跌破200日线',
           drawdown: triggerPrice > 0 ? Math.max((1 - explicitRiskPrice / triggerPrice) * 100, 0) : 0,
           weight: 2.5,
           price: explicitRiskPrice
@@ -109,7 +110,7 @@ function buildMovingAverageTemplatePlan(state) {
       : {
           id: 'deep-defense',
           label: '深水防守',
-          signal: explicitRiskPrice > 0 ? 'MA200 仅作风控，不单列加仓' : '低于 MA120 15%',
+          signal: explicitRiskPrice > 0 ? '200日线仅作风控，不单列加仓' : '低于120日线 15%',
           drawdown: 15,
           weight: 2.5,
           price: fallbackRiskPrice
@@ -131,9 +132,9 @@ function buildMovingAverageTemplatePlan(state) {
 
   return {
     mode: 'ma120-risk',
-    anchorLabel: 'MA120 触发价',
+    anchorLabel: '120日线触发价',
     anchorPrice: triggerPrice,
-    riskLabel: 'MA200 风控价',
+    riskLabel: '200日线风控价',
     riskPrice: explicitRiskPrice || fallbackRiskPrice,
     investableCapital,
     reserveCapital,
@@ -276,6 +277,9 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
   );
   const selectedFundCurrency = resolveMarketCurrency(selectedFund);
   const benchmarkCurrency = resolveMarketCurrency(benchmarkFund);
+  const selectedFundLabel = formatMarketLabel(selectedFund || { code: state.symbol });
+  const benchmarkCodeLabel = formatMarketCode(benchmarkFund?.code || BENCHMARK_CODE);
+  const benchmarkNameLabel = formatMarketName(benchmarkFund || { code: BENCHMARK_CODE });
 
   useEffect(() => {
     if (!benchmarkFund?.code) {
@@ -375,8 +379,8 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
   );
 
   const strategySummary = selectedStrategy === 'peak-drawdown'
-    ? `按 ${benchmarkFund?.code || BENCHMARK_CODE} 的阶段高点 ${formatFundPrice(computed.anchorPrice, benchmarkCurrency)} 向下拆成 8 档固定回撤。`
-    : `按 ${benchmarkFund?.code || BENCHMARK_CODE} 的 MA120 触发价 ${formatFundPrice(computed.anchorPrice, benchmarkCurrency)} 和 MA200 风控价 ${formatFundPrice(computed.riskPrice, benchmarkCurrency)} 生成分层。`;
+    ? `按 ${benchmarkCodeLabel} 的阶段高点 ${formatFundPrice(computed.anchorPrice, benchmarkCurrency)} 向下拆成 8 档固定回撤。`
+    : `按 ${benchmarkCodeLabel} 的120日线触发价 ${formatFundPrice(computed.anchorPrice, benchmarkCurrency)} 和200日线风控价 ${formatFundPrice(computed.riskPrice, benchmarkCurrency)} 生成分层。`;
 
   function handleCreatePlan() {
     persistPlanState({
@@ -393,12 +397,12 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
       <PageHero
         backHref={links.home}
         backLabel="返回策略总览"
-        eyebrow="New Strategy Plan"
+        eyebrow="策略新建"
         title="新建建仓计划"
         description="在这里创建建仓策略，选择均线分层或固定回撤模板。创建完成后回到首页只读查看，不在首页直接修改。"
         badges={[
-          <Pill key="symbol" tone="indigo">{selectedFund?.code || state.symbol || '未选择标的'}</Pill>,
-          <Pill key="benchmark" tone="slate">{benchmarkFund?.code || BENCHMARK_CODE}</Pill>,
+          <Pill key="symbol" tone="indigo">{formatMarketCode(selectedFund?.code || state.symbol) || '未选择标的'}</Pill>,
+          <Pill key="benchmark" tone="slate">{benchmarkCodeLabel}</Pill>,
           <Pill key="strategy" tone="slate">{activeStrategy.label}</Pill>
         ]}
       />
@@ -407,7 +411,7 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
         <div className="grid gap-6 lg:grid-cols-5">
           <div className="min-w-0 space-y-6 lg:col-span-3">
             <Card className="min-w-0 overflow-hidden">
-              <SectionHeading eyebrow="Step 01" title="基础设置" description="先确定标的、预算规模和策略锚点，这些输入会直接联动到右侧的成本预览和资金模型。" />
+              <SectionHeading eyebrow="第一步" title="基础设置" description="先确定标的、预算规模和策略锚点，这些输入会直接联动到右侧的成本预览和资金模型。" />
 
               {marketError ? (
                 <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
@@ -424,12 +428,12 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
                   />
                 </Field>
 
-                <Field className="min-w-0" label="资产标的" helper="与首页共用同一套纳指 ETF 标的池。">
+                <Field className="min-w-0" label="资产标的" helper="与首页共用同一套纳指基金标的池。">
                   {marketEntries.length ? (
                     <SelectField
                       className="min-w-0"
                       options={marketEntries.map((entry) => ({
-                        label: `${entry.code} · ${entry.name}`,
+                        label: formatMarketLabel(entry),
                         value: entry.code
                       }))}
                       value={state.symbol}
@@ -445,9 +449,9 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
 
                 {selectedFund ? (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                    <div className="font-semibold text-slate-900">{selectedFund.name}</div>
+                    <div className="font-semibold text-slate-900">{selectedFundLabel}</div>
                     <div className="mt-1">当前现价 {formatFundPrice(selectedFund.current_price, selectedFundCurrency)}</div>
-                    <div className="mt-1">策略参考基准 {benchmarkFund?.code || BENCHMARK_CODE} · {formatFundPrice(benchmarkFund?.current_price, benchmarkCurrency)}</div>
+                    <div className="mt-1">策略参考基准 {benchmarkNameLabel}，{formatFundPrice(benchmarkFund?.current_price, benchmarkCurrency)}</div>
                   </div>
                 ) : null}
 
@@ -455,13 +459,13 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
                   <Field label="总投资额">
                     <NumberInput step="0.01" value={state.totalBudget} onChange={(event) => setState((current) => ({ ...current, totalBudget: Number(event.target.value) || 0 }))} />
                   </Field>
-                  <Field label={selectedStrategy === 'peak-drawdown' ? '阶段高点' : 'MA120 触发价'}>
+                  <Field label={selectedStrategy === 'peak-drawdown' ? '阶段高点' : '120日线触发价'}>
                     <NumberInput step="0.001" value={state.basePrice} onChange={(event) => setState((current) => ({ ...current, basePrice: Number(event.target.value) || 0 }))} />
                   </Field>
                 </div>
 
                 {selectedStrategy === 'ma120-risk' ? (
-                  <Field label="MA200 风控价" helper="当它足够低于 MA120 深水层时，会进入最后一档。">
+                  <Field label="200日线风控价" helper="当它足够低于120日线深水层时，会进入最后一档。">
                     <NumberInput step="0.001" value={state.riskControlPrice} onChange={(event) => setState((current) => ({ ...current, riskControlPrice: Number(event.target.value) || 0 }))} />
                   </Field>
                 ) : null}
@@ -488,7 +492,7 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
             </Card>
 
             <Card className="min-w-0 overflow-hidden">
-              <SectionHeading eyebrow="Step 02" title="策略模板" description="这里决定后续分层是按均线执行，还是按历史高点的固定回撤执行。" />
+              <SectionHeading eyebrow="第二步" title="策略模板" description="这里决定后续分层是按均线执行，还是按历史高点的固定回撤执行。" />
 
               <div className="mt-6 grid gap-4 md:grid-cols-2">
                 {strategyOptions.map((option) => (
@@ -512,7 +516,7 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
                 <div className="mt-5 rounded-[24px] border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white p-5">
                   <div className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-500">当前模板说明</div>
                   <div className="mt-2 text-lg font-bold text-indigo-700">{activeStrategy.label}</div>
-                  <div className="mt-2 text-sm font-semibold text-slate-700">参考基准 {benchmarkFund?.name || BENCHMARK_CODE}</div>
+                  <div className="mt-2 text-sm font-semibold text-slate-700">参考基准 {benchmarkNameLabel}</div>
                   <p className="mt-3 text-sm leading-6 text-slate-500">{strategySummary}</p>
                   <div className="mt-4 inline-flex rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500">
                     首页仅查看策略结果，如需调整请回到本页重新创建
@@ -522,11 +526,11 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
 
             <Card className="min-w-0 overflow-hidden">
               <SectionHeading
-                eyebrow="Step 03"
+                eyebrow="第三步"
                 title={selectedStrategy === 'peak-drawdown' ? '固定回撤 8 档' : '均线分层设置'}
                 description={selectedStrategy === 'peak-drawdown'
                   ? '档位和跌幅固定，资金按档位序号逐级加大，最后一档是极端回撤位。'
-                  : '均线模板会基于 MA120 触发价和 MA200 风控价自动生成 4 档执行层。'}
+                  : '均线模板会基于120日线触发价和200日线风控价自动生成 4 档执行层。'}
               />
 
               <div className="mt-6 space-y-4">
@@ -571,7 +575,7 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
 
           <div className="min-w-0 space-y-6 lg:col-span-2">
             <Card className="min-w-0 overflow-hidden border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white">
-              <SectionHeading eyebrow="Plan Preview" title="策略成本预览" />
+              <SectionHeading eyebrow="结果预览" title="策略成本预览" />
               <div className="mt-6 rounded-[24px] border border-white/80 bg-white/90 p-5 shadow-sm">
                 <div className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-500">预估平均成本</div>
                 <div className="mt-2 text-3xl font-extrabold tracking-tight text-indigo-700">{formatFundPrice(computed.averageCost, benchmarkCurrency)}</div>
@@ -585,7 +589,7 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
                     <strong className="text-slate-900">{formatCurrency(computed.reserveCapital, '¥ ')}</strong>
                   </div>
                   <div className="flex items-center justify-between text-sm text-slate-500">
-                    <span>{computed.anchorLabel} ({benchmarkFund?.code || BENCHMARK_CODE})</span>
+                    <span>{computed.anchorLabel}（{benchmarkCodeLabel}）</span>
                     <strong className="text-slate-900">{formatFundPrice(computed.anchorPrice, benchmarkCurrency)}</strong>
                   </div>
                 </div>
@@ -630,7 +634,7 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
               <p className="mt-2 text-sm leading-6 text-emerald-800">
                 {selectedStrategy === 'peak-drawdown'
                   ? `当前计划会按 8 档固定回撤执行，首档 ${formatPercent(computed.layers[0]?.drawdown ?? 0, 1)}，极端档 ${formatPercent(computed.layers[computed.layers.length - 1]?.drawdown ?? 0, 1)}。`
-                  : `当前计划会按 4 档均线模板执行，先靠近 MA120 建首仓，再在更深位置逐步加大投入。`}
+                  : `当前计划会按 4 档均线模板执行，先靠近120日线建首仓，再在更深位置逐步加大投入。`}
               </p>
             </Card>
 
@@ -642,7 +646,7 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
                   <p className="mt-2 text-sm leading-6 text-amber-800">
                     {selectedStrategy === 'peak-drawdown'
                       ? '固定回撤模板的跌幅档位不会自动变化，调整阶段高点会整体联动 8 档价格。'
-                      : '均线模板下，若 MA200 高于深水层，它只作为风控线提示，不会反向插入加仓顺序。'}
+                      : '均线模板下，若200日线高于深水层，它只作为风控线提示，不会反向插入加仓顺序。'}
                   </p>
                 </div>
               </div>

@@ -14,9 +14,9 @@ export function CatalogPage() {
   return (
     <PageShell className="pb-20">
       <PageHero
-        eyebrow="Navigation Updated"
-        title="页面导航已移至首页 Tab"
-        description="旧目录页已停用，系统会自动回到首页。后续请直接在首页顶部通过 Tab 切换各功能页面。"
+        eyebrow="导航已更新"
+        title="页面导航已移至首页标签页"
+        description="旧目录页已停用，系统会自动回到首页。后续请直接在首页顶部通过标签页切换各功能页面。"
       />
 
       <div className="mx-auto max-w-3xl px-6 pt-8">

@@ -100,7 +100,7 @@ function getStatusMeta(status) {
   return {
     Icon: Upload,
     label: '待上传截图',
-    detail: '支持 PNG / JPG / WebP 格式的交易凭证截图。',
+    detail: '支持常见图片格式的交易凭证截图。',
     colorClass: 'border border-slate-200 bg-slate-100 text-slate-600'
   };
 }
@@ -162,11 +162,11 @@ function buildTrackedCodes(comparison = {}) {
 
 function formatPositionMeta(position, snapshot) {
   if (position.currentPrice > 0) {
-    const base = `${position.code} · ${position.shares} 份 × ${Number(position.currentPrice).toFixed(4)}`;
-    return snapshot ? `${base} · 现价日期 ${formatPriceAsOf(snapshot)}` : `${base} · 手动现价`;
+    const base = `${position.code}，${position.shares} 份，单价 ${Number(position.currentPrice).toFixed(4)}`;
+    return snapshot ? `${base}，现价日期 ${formatPriceAsOf(snapshot)}` : `${base}，手动现价`;
   }
 
-  return `${position.code} · ${position.shares} 份 · 待补现价`;
+  return `${position.code}，${position.shares} 份，待补现价`;
 }
 
 function roundToCurrency(value) {
@@ -252,7 +252,7 @@ function buildOcrPreviewRows(rows = []) {
         code: String(row?.code || '').trim() || '待补代码',
         type: String(row?.type || '').trim() || '--',
         shares: Number(row?.shares) > 0 ? `${row.shares} 份` : '--',
-        detail: [dateText || '待补日期', priceValue > 0 ? `@ ${priceValue.toFixed(4)}` : '待补价格'].join(' · ')
+        detail: [dateText || '待补日期', priceValue > 0 ? `价格 ${priceValue.toFixed(4)}` : '待补价格'].join('，')
       };
     });
 
@@ -368,7 +368,7 @@ function SummaryValueCard({ value, advantageMeta, strategy, onStrategyChange }) 
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-indigo-900/45">Conclusion</div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-indigo-900/45">结果摘要</div>
             <div className="mt-2 text-sm font-semibold text-indigo-900/65">切换额外收益 (元)</div>
           </div>
           <span className={cx('rounded-full px-3 py-1 text-xs font-bold', advantageMeta.className)}>{advantageMeta.label}</span>
@@ -435,7 +435,7 @@ function TransactionEditorCard({ row, index, codeError, onUpdateRow, onRemoveRow
 
       <div className="mt-4 space-y-3">
         <Field label="日期">
-          <input className={cx(inputClass, 'bg-white')} placeholder="YYYY-MM-DD" value={row.date} onChange={(event) => onUpdateRow(index, 'date', event.target.value)} />
+          <input className={cx(inputClass, 'bg-white')} placeholder="例如 2026-03-29" value={row.date} onChange={(event) => onUpdateRow(index, 'date', event.target.value)} />
         </Field>
 
         <Field label="基金代码" helper={codeError || '基金代码为 6 位纯数字。'}>
@@ -493,7 +493,7 @@ function CompactOcrStatusCard({ fileName, statusMeta, recognizedCount, resultCon
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-3">
           <div className="min-w-0">
-            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">OCR Status</div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">识别状态</div>
             <div className="mt-2 truncate text-base font-bold text-slate-800">{fileName || '未命名文件'}</div>
           </div>
 
@@ -515,7 +515,7 @@ function CompactOcrStatusCard({ fileName, statusMeta, recognizedCount, resultCon
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">OCR 结果预览</div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">识别结果预览</div>
           {previewRows.length ? (
             <div className="mt-3 overflow-hidden rounded-xl border border-slate-100 bg-white">
               {previewRows.map((row) => (
@@ -533,7 +533,7 @@ function CompactOcrStatusCard({ fileName, statusMeta, recognizedCount, resultCon
               ) : null}
             </div>
           ) : (
-            <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-white px-3 py-4 text-sm text-slate-400">OCR 结果会在这里显示。</div>
+            <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-white px-3 py-4 text-sm text-slate-400">识别结果会在这里显示。</div>
           )}
         </div>
 
@@ -564,7 +564,7 @@ function PendingResultCard({ issueSummary, onEdit }) {
             <AlertTriangle className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-700/70">Pending Confirmation</div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-700/70">待确认</div>
             <div className="mt-2 text-lg font-bold text-amber-900">请先确认识别明细</div>
             <div className="mt-2 text-sm leading-6 text-amber-900/75">
               {issueSummary || '交易明细校验通过后，系统才会生成结果摘要。'}
@@ -585,7 +585,7 @@ function EditingSummaryStrip({ strategy, recognizedCount, onExit, onReset }) {
     <Card className="p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Edit Mode</div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">编辑状态</div>
           <div className="mt-2 text-sm font-semibold text-slate-500">正在编辑识别明细，确认后会重新计算摘要结果。</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -937,7 +937,7 @@ export function FundSwitchExperience({ links, inPagesDir, embedded = false }) {
       <div className="mx-auto max-w-6xl space-y-4 px-4 pt-6 sm:space-y-6 sm:px-6 sm:pt-8">
         {!hasImportedData ? (
           <Card className="flex flex-col p-4 sm:p-6">
-            <SectionHeading eyebrow="OCR Import" title="交易凭证导入" description={statusMeta.detail} />
+            <SectionHeading eyebrow="识别导入" title="交易凭证导入" description={statusMeta.detail} />
 
             <button
               className={cx(
@@ -955,7 +955,7 @@ export function FundSwitchExperience({ links, inPagesDir, embedded = false }) {
                 <CloudUpload className="mb-3 h-10 w-10 text-slate-400" />
               )}
               <div className="font-semibold text-slate-700">点击或拖拽上传截图</div>
-              <div className="mt-1 text-xs text-slate-500">支持 PNG, JPG, WebP 格式</div>
+              <div className="mt-1 text-xs text-slate-500">支持常见图片格式</div>
               {ocrState.status === 'idle' ? null : (
                 <div className="mt-4 w-full max-w-xs">
                   <div className="mb-1.5 flex items-center justify-between text-xs font-medium text-slate-500">
@@ -993,7 +993,7 @@ export function FundSwitchExperience({ links, inPagesDir, embedded = false }) {
             <Card className="overflow-hidden p-0">
               <div className="flex flex-col justify-between gap-4 border-b border-slate-200 bg-white p-4 sm:p-6 md:flex-row md:items-center">
                 <SectionHeading
-                  eyebrow="Editable Data"
+                  eyebrow="明细编辑"
                   title="交易数据明细"
                   description="识别结果需要修正时，在这里集中修改；确认后会自动重新计算摘要结果。"
                 />
@@ -1046,7 +1046,7 @@ export function FundSwitchExperience({ links, inPagesDir, embedded = false }) {
                       return (
                         <tr key={row.id} className="group transition-colors hover:bg-slate-50/50">
                           <td className="px-6 py-3">
-                            <input className={cx(tableInputClass, 'w-36')} placeholder="YYYY-MM-DD" value={row.date} onChange={(event) => updateRow(index, 'date', event.target.value)} />
+                            <input className={cx(tableInputClass, 'w-36')} placeholder="例如 2026-03-29" value={row.date} onChange={(event) => updateRow(index, 'date', event.target.value)} />
                           </td>
                           <td className="px-6 py-3">
                             <div className="relative">
@@ -1116,7 +1116,7 @@ export function FundSwitchExperience({ links, inPagesDir, embedded = false }) {
               />
 
               <Card className="p-4 sm:p-6">
-                <SectionHeading eyebrow={state.resultConfirmed ? 'Conclusion' : 'Pending'} title={state.resultConfirmed ? '当前切换判断' : '等待确认识别明细'} />
+                <SectionHeading eyebrow={state.resultConfirmed ? '结果摘要' : '待确认'} title={state.resultConfirmed ? '当前切换判断' : '等待确认识别明细'} />
 
                 <div className="mt-5 space-y-3 sm:space-y-4">
                   {state.resultConfirmed ? (
@@ -1171,7 +1171,7 @@ export function FundSwitchExperience({ links, inPagesDir, embedded = false }) {
             {state.resultConfirmed ? (
               <Card className="overflow-hidden p-0">
                 <div className="flex cursor-pointer flex-col gap-4 border-b border-slate-200 bg-slate-50 p-4 transition-colors hover:bg-slate-100 sm:flex-row sm:items-center sm:justify-between sm:p-6" onClick={() => setShowCalculationDetails((current) => !current)}>
-                  <SectionHeading eyebrow="Parameters" title="计算详细参数预设" description="默认保持收起，只有在需要补现价或校准参数时再展开修改。" />
+                  <SectionHeading eyebrow="参数预设" title="计算详细参数预设" description="默认保持收起，只有在需要补现价或校准参数时再展开修改。" />
                   <button className="flex items-center gap-2 self-start text-sm font-semibold text-slate-500 transition-colors hover:text-slate-800 sm:self-auto" type="button">
                     {showCalculationDetails ? '收起面板' : '展开修改'}
                     {showCalculationDetails ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
@@ -1183,7 +1183,7 @@ export function FundSwitchExperience({ links, inPagesDir, embedded = false }) {
                     <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">来源策略</div>
-                        <div className="mt-1 text-sm text-slate-600">切换 direct / trace 会重新按交易链路回放当前来源仓位。</div>
+                        <div className="mt-1 text-sm text-slate-600">切换“直接来源 / 穿透来源”会重新按交易链路回放当前来源仓位。</div>
                       </div>
                       <StrategyToggle strategy={summary.strategy} onChange={updateStrategy} />
                     </div>
@@ -1209,11 +1209,11 @@ export function FundSwitchExperience({ links, inPagesDir, embedded = false }) {
                     </div>
 
                     <div className="border-t border-slate-100 pt-6">
-                      <SectionHeading eyebrow="Cost Adjustments" title="切换成本调整项" />
+                      <SectionHeading eyebrow="成本调整" title="切换成本调整项" />
                       <div className="mt-5 grid gap-4 xl:grid-cols-3 xl:gap-6">
                         <label className="block rounded-xl border border-slate-100 bg-slate-50 p-4">
                           <span className="block text-sm font-bold text-slate-700">额外补入现金 (元)</span>
-                          <span className="mt-1 block text-[10px] leading-relaxed text-slate-500">direct 模式只累计当前目标仓位的直接补现金；trace 会继续把中间链路补现金穿透累加。</span>
+                          <span className="mt-1 block text-[10px] leading-relaxed text-slate-500">直接来源模式只累计当前目标仓位的直接补现金；穿透来源会继续把中间链路补现金向上追溯累加。</span>
                           <input className="mt-3 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 font-semibold text-slate-800 outline-none transition-all focus:border-indigo-400" type="number" step="0.01" value={summary.comparison.extraCash} onChange={(event) => updateComparisonScalar('extraCash', event.target.value)} />
                         </label>
 
@@ -1242,7 +1242,7 @@ export function FundSwitchExperience({ links, inPagesDir, embedded = false }) {
               </Card>
             ) : (
               <Card className="p-4 sm:p-6">
-                <SectionHeading eyebrow="Parameters" title="计算详细参数预设" description="请先确认 OCR 识别明细，校验通过后再生成和调整参数。" />
+                <SectionHeading eyebrow="参数预设" title="计算详细参数预设" description="请先确认识别明细，校验通过后再生成和调整参数。" />
               </Card>
             )}
           </>
@@ -1346,9 +1346,9 @@ export function FundSwitchExperience({ links, inPagesDir, embedded = false }) {
       <PageHero
         backHref={links.home}
         backLabel="返回策略总览"
-        eyebrow="Fund Switch Assistant"
+        eyebrow="基金切换分析"
         title="基金切换收益助手"
-        description="上传交易截图后，系统会智能识别整理成可编辑交易数据，并按 direct / trace 两种来源策略比较切换前后的真实收益。"
+        description="上传交易截图后，系统会智能识别整理成可编辑交易数据，并按“直接来源 / 穿透来源”两种策略比较切换前后的真实收益。"
         badges={hasImportedData ? [] : [
           <span key="status" className={cx('inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold', statusMeta.colorClass)}>
             <statusMeta.Icon className={cx('h-4 w-4', statusMeta.iconClassName)} />

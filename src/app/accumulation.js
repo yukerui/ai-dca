@@ -1,7 +1,7 @@
 const ACCUMULATION_KEY = 'aiDcaAccumulationState';
 
 export const defaultAccumulationState = {
-  symbol: 'QQQ',
+  symbol: '纳指基金',
   frequency: '每周',
   totalCapital: 5480.55,
   basePrice: 601.3,
@@ -102,6 +102,15 @@ function readSavedWeights(saved) {
   return defaultAccumulationState.weights;
 }
 
+function normalizeSavedSymbol(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized || normalized === 'QQQ') {
+    return defaultAccumulationState.symbol;
+  }
+
+  return normalized;
+}
+
 export function readAccumulationState() {
   if (typeof window === 'undefined') {
     return defaultAccumulationState;
@@ -114,7 +123,7 @@ export function readAccumulationState() {
     }
 
     return {
-      symbol: saved.symbol || defaultAccumulationState.symbol,
+      symbol: normalizeSavedSymbol(saved.symbol),
       frequency: saved.frequency || defaultAccumulationState.frequency,
       totalCapital: Number(saved.totalCapital) || defaultAccumulationState.totalCapital,
       basePrice: Number(saved.basePrice) || defaultAccumulationState.basePrice,
@@ -132,7 +141,7 @@ export function persistAccumulationState(state, computed = buildStages(state)) {
   }
 
   const safeState = {
-    symbol: state.symbol || defaultAccumulationState.symbol,
+    symbol: normalizeSavedSymbol(state.symbol),
     frequency: state.frequency || defaultAccumulationState.frequency,
     totalCapital: Number(state.totalCapital) || 0,
     basePrice: Number(state.basePrice) || 0,

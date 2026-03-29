@@ -7,9 +7,9 @@ import { HistoryExperience } from './HistoryExperience.jsx';
 import { HomeExperience } from './HomeExperience.jsx';
 
 const WORKSPACE_TITLES = {
-  home: 'QQQ 建仓策略总览',
+  home: '建仓策略总览',
   dca: '定投计划',
-  fundSwitch: '基金切换收益助手',
+  fundSwitch: '基金切换收益分析',
   history: '交易历史'
 };
 
@@ -95,9 +95,9 @@ export function WorkspacePage({ initialTab = 'home', inPagesDir = false }) {
 
   return (
     <PageShell>
-      <PageHero eyebrow="Stock Accumulation Calculator Dashboard" title={heroTitle}>
-        <PageTabs activeKey={activeTab} onSelect={handleSelectTab} tabs={tabs} />
-      </PageHero>
+        <PageHero eyebrow="股票建仓策略看板" title={heroTitle}>
+          <PageTabs activeKey={activeTab} onSelect={handleSelectTab} tabs={tabs} />
+        </PageHero>
       {renderActivePanel()}
     </PageShell>
   );

@@ -1,5 +1,5 @@
 export const PROJECT_ID = '4075224789216868860';
-export const PROJECT_TITLE = 'Stock Accumulation Calculator Dashboard';
+export const PROJECT_TITLE = '股票建仓策略看板';
 export const HOME_SCREEN_ID = '75a393ec1a2d424ebafa1d0e59402d26';
 
 export const GROUP_ORDER = ['home', 'accumEdit', 'accumNew', 'addLevel', 'dca', 'fundSwitch', 'history'];
@@ -65,12 +65,12 @@ const SCREEN_GROUPS = Object.fromEntries(
 );
 
 const RAW_SCREENS = [
-  { id: '75a393ec1a2d424ebafa1d0e59402d26', title: 'QQQ 建仓策略总览', device: 'DESKTOP' },
+  { id: '75a393ec1a2d424ebafa1d0e59402d26', title: '建仓策略总览', device: 'DESKTOP' },
   { id: '81fee20edb5542f08bb363ac837b327c', title: '加仓策略配置', device: 'DESKTOP' },
   { id: 'd142c0822784448ab9b8016e300bd25c', title: '新增建仓层级', device: 'DESKTOP' },
   { id: '03ef40c5dff048f8b1416a6a4567f9ee', title: '新建建仓计划', device: 'DESKTOP' },
   { id: '65aaf3e700d3443c9810f6c727b045e8', title: '交易历史', device: 'DESKTOP' },
-  { id: '5e3d43b9c2ea47f9b5d2be752bca564e', title: '基金切换收益助手', device: 'DESKTOP' },
+  { id: '5e3d43b9c2ea47f9b5d2be752bca564e', title: '基金切换收益分析', device: 'DESKTOP' },
   { id: '530f6fe554444798820046dee4d4b889', title: '定投计划', device: 'DESKTOP' }
 ];
 

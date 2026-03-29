@@ -23,17 +23,17 @@ export function HistoryExperience({ links, embedded = false }) {
   const content = (
     <div className={cx('mx-auto max-w-6xl space-y-6', embedded ? 'px-4 pt-6 sm:px-6 sm:pt-8' : 'px-6 pt-8')}>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard eyebrow="Gross Shares" value={`${totalShares.toFixed(2)} 股`} note="最近执行记录累计股数" />
-          <StatCard eyebrow="Average Price" value={formatCurrency(totalInvestment / Math.max(totalShares, 1))} note="历史成交均价" />
-          <StatCard accent="indigo" eyebrow="Buy Amount" value={formatCurrency(buyAmount)} note="共享建仓状态同步的买入金额" />
-          <StatCard accent="emerald" eyebrow="Sell Amount" value={formatCurrency(sellAmount)} note="用于观察历史兑现规模" />
+          <StatCard eyebrow="累计股数" value={`${totalShares.toFixed(2)} 股`} note="最近执行记录累计股数" />
+          <StatCard eyebrow="平均价格" value={formatCurrency(totalInvestment / Math.max(totalShares, 1))} note="历史成交均价" />
+          <StatCard accent="indigo" eyebrow="买入金额" value={formatCurrency(buyAmount)} note="共享建仓状态同步的买入金额" />
+          <StatCard accent="emerald" eyebrow="卖出金额" value={formatCurrency(sellAmount)} note="用于观察历史兑现规模" />
         </div>
 
         <Card>
-          <SectionHeading
-            eyebrow="History Table"
-            title="最近执行记录"
-            description="保留极简表头和横向分隔线，确保在调试数据时信息密度够高但不显得拥挤。"
+            <SectionHeading
+              eyebrow="历史表格"
+              title="最近执行记录"
+              description="保留极简表头和横向分隔线，确保在调试数据时信息密度够高但不显得拥挤。"
             action={
               <>
                 <button className={secondaryButtonClass} type="button">
@@ -90,7 +90,7 @@ export function HistoryExperience({ links, embedded = false }) {
 
         <div className="grid gap-6 lg:grid-cols-2">
           <Card className="border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 text-white">
-            <SectionHeading eyebrow="Value Trend" title="价值趋势分析" />
+            <SectionHeading eyebrow="价值趋势" title="价值趋势分析" />
             <p className="mt-4 max-w-xl text-sm leading-6 text-slate-300">
               查看不同买入区间的执行密度，以及历史成交对当前平均成本的影响。近期买入主要集中在第二层和第三层附近。
             </p>
@@ -105,7 +105,7 @@ export function HistoryExperience({ links, embedded = false }) {
           </Card>
 
           <Card className="border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white">
-            <SectionHeading eyebrow="Strategy Suggestion" title="金字塔加仓建议" />
+            <SectionHeading eyebrow="策略建议" title="金字塔加仓建议" />
             <p className="mt-4 text-sm leading-6 text-slate-600">
               基于过去 5 次买入操作，当前阶段性加仓仍然偏向第二和第三层。建议保留对 {formatCurrency(accumulation.stages[1]?.price ?? accumulationState.basePrice)} 的观察仓位。
             </p>
@@ -145,11 +145,11 @@ export function HistoryExperience({ links, embedded = false }) {
       <PageHero
         backHref={links.accumEdit}
         backLabel="返回加仓配置"
-        eyebrow="Execution History"
-        title="QQQ 交易历史"
-        description="把最近执行过的买卖记录集中到一个轻量 SaaS 表格里，便于快速核对执行密度、累计金额和当前计划的一致性。"
+        eyebrow="交易历史"
+        title="交易历史"
+        description="把最近执行过的买卖记录集中到一个轻量表格里，便于快速核对执行密度、累计金额和当前计划的一致性。"
         badges={[
-          <Pill key="symbol" tone="indigo">QQQ</Pill>,
+          <Pill key="symbol" tone="indigo">当前标的</Pill>,
           <Pill key="count" tone="slate">{sampleHistory.length} 条记录</Pill>
         ]}
       >

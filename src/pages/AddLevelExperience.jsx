@@ -37,7 +37,7 @@ export function AddLevelExperience({ links }) {
       <PageHero
         backHref={links.accumEdit}
         backLabel="返回加仓配置"
-        eyebrow="Add One More Layer"
+        eyebrow="新增层级"
         title="新增加仓层级"
         description="在当前金字塔模型上追加一层新的价格区间，系统会实时计算新增预算、总跌幅和新的平均成本。"
         badges={[
@@ -50,7 +50,7 @@ export function AddLevelExperience({ links }) {
         <div className="grid gap-6 lg:grid-cols-5">
           <Card className="lg:col-span-3">
             <SectionHeading
-              eyebrow="Layer Inputs"
+              eyebrow="层级输入"
               title="层级参数设置"
               description="新增层级通常放在最深一层，所以只需要确认新的权重和更深的累计跌幅。"
               action={saved ? (
@@ -94,7 +94,7 @@ export function AddLevelExperience({ links }) {
 
           <div className="space-y-6 lg:col-span-2">
             <Card>
-              <SectionHeading eyebrow="Preview" title="新增层级预览" />
+            <SectionHeading eyebrow="预览" title="新增层级预览" />
               <div className="mt-6 flex min-h-[180px] items-end justify-center gap-3 rounded-[24px] border border-slate-200 bg-slate-50 p-5">
                 {preview.stages.map((stage, index) => (
                   <div key={stage.id} className="flex w-14 flex-col items-center gap-3">
@@ -123,7 +123,7 @@ export function AddLevelExperience({ links }) {
             </Card>
 
             <Card>
-              <SectionHeading eyebrow="Cash Impact" title="预算与现金变化" />
+            <SectionHeading eyebrow="资金变化" title="预算与现金变化" />
               <div className="mt-5 space-y-3 text-sm">
                 <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-slate-500">
                   <span>计划追加金额</span>
