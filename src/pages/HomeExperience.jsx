@@ -559,7 +559,7 @@ export function HomeExperience({ links, inPagesDir = false }) {
   const [timeframe, setTimeframe] = useState('1m');
   const [activeBarId, setActiveBarId] = useState('');
   const [mobilePanels, setMobilePanels] = useState({
-    price: true,
+    price: false,
     execution: true,
     watchlist: false,
     plans: false,
@@ -1057,8 +1057,40 @@ export function HomeExperience({ links, inPagesDir = false }) {
       : {
           title: '已进入最深防守区',
           note: '继续以小步分批为主，优先保留机动现金。'
-        };
+      };
   }, [completedLayerCount, executionLayers.length, nextTriggerLayer, selectedStrategy, strategyDisplayCurrency]);
+  const currentDecisionSummary = useMemo(() => {
+    if (!executionLayers.length) {
+      return {
+        title: '待创建策略',
+        note: '先创建一条策略后，首页才会生成下一档判断。',
+        detail: ''
+      };
+    }
+
+    if (nextTriggerLayer && strategyDisplayCurrentPrice > 0 && nextTriggerLayer.price > 0) {
+      const dropNeededPct = Math.max((strategyDisplayCurrentPrice - nextTriggerLayer.price) / strategyDisplayCurrentPrice * 100, 0);
+      return {
+        title: `距离下一档还差 ${formatPercent(dropNeededPct, 1)}`,
+        note: nextTriggerLayer.signal,
+        detail: `参考价 ${formatFundPrice(nextTriggerLayer.price, strategyDisplayCurrency)}`
+      };
+    }
+
+    if (completedLayerCount > 0) {
+      return {
+        title: `已进入第 ${completedLayerCount} 档`,
+        note: completedLayerCount >= executionLayers.length ? '当前已经进入最深触发区。' : '当前价格已进入已完成档位区间。',
+        detail: ''
+      };
+    }
+
+    return {
+      title: '首档尚未触发',
+      note: '当前还未进入首档。',
+      detail: `等待价格靠近 ${formatFundPrice(nextBuyPrice, strategyDisplayCurrency)} 再执行。`
+    };
+  }, [completedLayerCount, executionLayers.length, nextBuyPrice, nextTriggerLayer, strategyDisplayCurrentPrice, strategyDisplayCurrency]);
   const mobileProgressPct = executionLayers.length ? completedLayerCount / executionLayers.length * 100 : 0;
 
   function toggleMobilePanel(panelKey) {
@@ -1190,10 +1222,10 @@ export function HomeExperience({ links, inPagesDir = false }) {
                 </div>
                 <div className="rounded-[22px] bg-white/12 px-4 py-3 backdrop-blur-sm">
                   <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">当前观察标的</div>
-                  <div className="mt-1 text-base font-semibold leading-6 text-white">
-                    {selectedFund?.code || '--'}
-                    {selectedFund?.name ? ` · ${selectedFund.name}` : ''}
-                  </div>
+                  <div className="mt-1 text-base font-semibold leading-6 text-white">{selectedFund?.code || '--'}</div>
+                  {selectedFund?.name ? (
+                    <div className="text-sm leading-6 text-indigo-100">{selectedFund.name}</div>
+                  ) : null}
                 </div>
               </div>
 
@@ -1224,9 +1256,14 @@ export function HomeExperience({ links, inPagesDir = false }) {
               </div>
 
               <div className="rounded-[24px] bg-white/12 px-4 py-3 backdrop-blur-sm">
-                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">下一步建议</div>
-                <div className="mt-2 text-base font-semibold leading-6 text-white">{nextStepSuggestion.title}</div>
-                <div className="mt-1 text-sm leading-6 text-indigo-100">{nextStepSuggestion.note}</div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">当前判断</div>
+                <div className="mt-2 text-base font-semibold leading-6 text-white">{currentDecisionSummary.title}</div>
+                <div className="mt-1 text-sm leading-6 text-indigo-100">{currentDecisionSummary.note}</div>
+                {currentDecisionSummary.detail ? (
+                  <div className="text-sm leading-6 text-indigo-100">{currentDecisionSummary.detail}</div>
+                ) : null}
+                <div className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-white/70">动作建议</div>
+                <div className="mt-1 text-sm leading-6 text-indigo-100">{nextStepSuggestion.title}</div>
               </div>
             </div>
           </Card>
