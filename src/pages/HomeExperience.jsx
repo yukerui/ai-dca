@@ -1197,16 +1197,16 @@ export function HomeExperience({ links, inPagesDir = false }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3">
                 <div className="rounded-[22px] bg-white/12 px-4 py-3 backdrop-blur-sm">
                   <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">当前价格</div>
-                  <div className="mt-2 text-[26px] font-extrabold leading-none">
+                  <div className="mt-2 min-w-0 break-all text-[24px] font-extrabold leading-tight">
                     {formatFundPrice(strategyDisplayCurrentPrice, strategyDisplayCurrency)}
                   </div>
                 </div>
                 <div className="rounded-[22px] bg-white/12 px-4 py-3 backdrop-blur-sm">
                   <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">下一次触发</div>
-                  <div className="mt-2 text-[26px] font-extrabold leading-none">
+                  <div className="mt-2 min-w-0 break-all text-[24px] font-extrabold leading-tight">
                     {nextTriggerLayer ? formatFundPrice(nextBuyPrice, strategyDisplayCurrency) : '已到深水区'}
                   </div>
                 </div>
@@ -1538,138 +1538,6 @@ export function HomeExperience({ links, inPagesDir = false }) {
           </MobileFoldSection>
 
           <MobileFoldSection
-            eyebrow="Watchlist"
-            title="自选基金"
-            summary={selectedFund ? (
-              <div className="space-y-1 text-sm text-slate-500">
-                <div>
-                  <span className="font-semibold text-slate-800">{selectedFund.code}</span>
-                  {' · '}
-                  {formatFundPrice(currentFundPrice, selectedFundCurrency)}
-                </div>
-                <div>其余 {Math.max(watchlistItems.length - 1, 0)} 只基金收起管理</div>
-              </div>
-            ) : '当前没有选中的基金。'}
-            isOpen={mobilePanels.watchlist}
-            onToggle={() => toggleMobilePanel('watchlist')}
-          >
-            {watchlistNotice ? (
-              <div
-                className={cx(
-                  'rounded-2xl px-4 py-3 text-sm',
-                  watchlistNoticeTone === 'emerald'
-                    ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : watchlistNoticeTone === 'amber'
-                      ? 'border border-amber-200 bg-amber-50 text-amber-700'
-                      : 'border border-slate-200 bg-slate-50 text-slate-600'
-                )}
-              >
-                {watchlistNotice}
-              </div>
-            ) : null}
-
-            {marketError ? (
-              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                自选基金数据加载失败：{marketError}
-              </div>
-            ) : null}
-
-            <div className="mt-4 space-y-3">
-              {selectedFund ? (
-                <div className="rounded-[24px] border border-indigo-200 bg-indigo-50 px-4 py-4 shadow-sm shadow-indigo-100">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-lg font-semibold text-slate-900">{selectedFund.code}</div>
-                      <div className="mt-1 text-sm leading-6 text-slate-500">{selectedFund.name}</div>
-                    </div>
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-indigo-600">当前观察</span>
-                  </div>
-                  <div className="mt-4 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">现价</div>
-                  <div className="mt-1 text-xl font-bold text-indigo-700">{formatFundPrice(selectedFund.current_price, selectedFundCurrency)}</div>
-                </div>
-              ) : null}
-
-              <div className="grid grid-cols-3 gap-2">
-                <button className={cx(subtleButtonClass, 'px-2 text-xs')} type="button" onClick={exportWatchlistConfig}>
-                  导出配置
-                </button>
-                <button className={cx(subtleButtonClass, 'px-2 text-xs')} type="button" onClick={() => importInputRef.current?.click()}>
-                  导入配置
-                </button>
-                <button className={cx(subtleButtonClass, 'px-2 text-xs')} type="button" onClick={restoreDefaultWatchlist}>
-                  恢复默认
-                </button>
-              </div>
-
-              <div className="space-y-3">
-                <SelectField
-                  disabled={!addableEntries.length}
-                  options={addableEntries.map((entry) => ({
-                    label: `${entry.code} · ${entry.name}`,
-                    value: entry.code
-                  }))}
-                  value={pendingCode}
-                  onChange={(event) => setPendingCode(event.target.value)}
-                />
-                <button
-                  className={cx(primaryButtonClass, 'w-full')}
-                  disabled={!pendingCode || !addableEntries.length}
-                  type="button"
-                  onClick={addWatchlistItem}
-                >
-                  <Plus className="h-4 w-4 shrink-0" />
-                  新增自选
-                </button>
-              </div>
-
-              <div className="space-y-3">
-                {watchlistItems.map((item) => {
-                  const isActive = item.code === selectedCode;
-                  const itemCurrency = resolveMarketCurrency(item);
-                  return (
-                    <div
-                      key={`mobile-watch-${item.code}`}
-                      className={cx(
-                        'relative rounded-[22px] border px-4 py-3',
-                        isActive ? 'border-indigo-200 bg-indigo-50' : 'border-slate-200 bg-slate-50'
-                      )}
-                    >
-                      <button
-                        className="absolute inset-0 rounded-[22px]"
-                        type="button"
-                        aria-label={`切换到 ${item.code}`}
-                        onClick={() => setSelectedCode(item.code)}
-                      />
-                      <div className="relative z-10 flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold text-slate-900">{item.code}</div>
-                          <div className="mt-1 truncate text-sm text-slate-500">{item.name}</div>
-                        </div>
-                        <button
-                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-500"
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            removeWatchlistItem(item.code);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 shrink-0" />
-                        </button>
-                      </div>
-                      <div className="relative z-10 mt-3 flex items-center justify-between gap-3">
-                        <div className="text-sm font-semibold text-slate-900">{formatFundPrice(item.current_price, itemCurrency)}</div>
-                        <span className={cx('rounded-full px-3 py-1 text-xs font-semibold', isActive ? 'bg-white text-indigo-600' : 'bg-white text-slate-500')}>
-                          {isActive ? '当前观察' : '点击切换'}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </MobileFoldSection>
-
-          <MobileFoldSection
             eyebrow="Plans"
             title="策略列表"
             summary={planList.length ? (
@@ -1834,138 +1702,6 @@ export function HomeExperience({ links, inPagesDir = false }) {
               还没有已创建的策略。先进入“新建策略”页创建一条，首页才会出现可切换的策略列表。
             </div>
           )}
-        </Card>
-
-        <Card>
-          <SectionHeading
-            eyebrow="Watchlist"
-            title="自选基金"
-            action={
-              <div className="flex w-full flex-col gap-3">
-                <div className="flex flex-wrap items-center gap-3">
-                  <button className={cx(subtleButtonClass, 'w-full sm:w-auto')} type="button" onClick={exportWatchlistConfig}>
-                    <Download className="h-4 w-4 shrink-0" />
-                    导出配置
-                  </button>
-                  <button className={cx(subtleButtonClass, 'w-full sm:w-auto')} type="button" onClick={() => importInputRef.current?.click()}>
-                    <Upload className="h-4 w-4 shrink-0" />
-                    导入配置
-                  </button>
-                  <button className={cx(subtleButtonClass, 'w-full sm:w-auto')} type="button" onClick={restoreDefaultWatchlist}>
-                    恢复默认
-                  </button>
-                  <input
-                    ref={importInputRef}
-                    accept="application/json"
-                    className="hidden"
-                    type="file"
-                    onChange={importWatchlistConfig}
-                  />
-                </div>
-                <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-                  <div className="min-w-0 sm:min-w-[220px]">
-                    <SelectField
-                      disabled={!addableEntries.length}
-                      options={addableEntries.map((entry) => ({
-                        label: `${entry.code} · ${entry.name}`,
-                        value: entry.code
-                      }))}
-                      value={pendingCode}
-                      onChange={(event) => setPendingCode(event.target.value)}
-                    />
-                  </div>
-                  <button
-                    className={cx(primaryButtonClass, 'w-full sm:w-auto')}
-                    disabled={!pendingCode || !addableEntries.length}
-                    type="button"
-                    onClick={addWatchlistItem}
-                  >
-                    <Plus className="h-4 w-4 shrink-0" />
-                    新增自选
-                  </button>
-                </div>
-              </div>
-            }
-          />
-
-          {watchlistNotice ? (
-            <div
-              className={cx(
-                'mt-5 rounded-2xl px-4 py-3 text-sm',
-                watchlistNoticeTone === 'emerald'
-                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                  : watchlistNoticeTone === 'amber'
-                    ? 'border border-amber-200 bg-amber-50 text-amber-700'
-                    : 'border border-slate-200 bg-slate-50 text-slate-600'
-              )}
-            >
-              {watchlistNotice}
-            </div>
-          ) : null}
-
-          {marketError ? (
-            <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-              自选基金数据加载失败：{marketError}
-            </div>
-          ) : null}
-
-          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {watchlistItems.map((item) => {
-              const isActive = item.code === selectedCode;
-              const itemCurrency = resolveMarketCurrency(item);
-              return (
-                <div
-                  key={item.code}
-                  className={cx(
-                    'group relative rounded-[24px] border px-4 py-4 transition-all',
-                    isActive
-                      ? 'border-indigo-200 bg-indigo-50 shadow-sm shadow-indigo-100'
-                      : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'
-                  )}
-                >
-                  <button
-                    className="absolute inset-0 rounded-[24px]"
-                    type="button"
-                    aria-label={`切换到 ${item.code}`}
-                    onClick={() => setSelectedCode(item.code)}
-                  />
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-lg font-semibold text-slate-900">{item.code}</div>
-                      <div className="mt-1 line-clamp-2 text-sm leading-6 text-slate-500">{item.name}</div>
-                    </div>
-                    <button
-                      className="relative z-10 inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        removeWatchlistItem(item.code);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4 shrink-0" />
-                    </button>
-                  </div>
-                  <div className="mt-4 flex items-end justify-between gap-4">
-                    <div>
-                      <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">现价</div>
-                      <div className={cx('mt-1 text-xl font-bold', isActive ? 'text-indigo-700' : 'text-slate-900')}>
-                        {formatFundPrice(item.current_price, itemCurrency)}
-                      </div>
-                    </div>
-                    <span className={cx('rounded-full px-3 py-1 text-xs font-semibold', isActive ? 'bg-white text-indigo-600' : 'bg-white text-slate-500')}>
-                      {isActive ? '当前观察' : '点击切换'}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {!watchlistItems.length && !marketError ? (
-            <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-              当前没有可展示的自选基金，请先从右上角加入一个可用标的。
-            </div>
-          ) : null}
         </Card>
 
         <Card className="p-4 sm:p-5">
