@@ -70,15 +70,6 @@ function formatRawNumber(value, digits = 3) {
   return Number(value).toFixed(digits).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
 }
 
-function formatPlanTimeLabel(value = '') {
-  const raw = String(value || '').trim();
-  if (!raw) {
-    return '--';
-  }
-
-  return raw.slice(0, 16).replace('T', ' ');
-}
-
 function mapReferencePrice(value, ratio = 1) {
   const numericValue = Number(value);
   const numericRatio = Number(ratio);
@@ -1208,9 +1199,6 @@ export function HomeExperience({ links, inPagesDir = false }) {
                   <div className="max-w-[14ch] break-words text-[28px] font-extrabold leading-[1.15]">
                     {planState?.name || activeStrategyOption.label}
                   </div>
-                  <div className="text-sm leading-6 text-indigo-100">
-                    {planState?.name ? '已创建并启用的建仓模板' : '当前按默认模板展示策略建议'}
-                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white">
@@ -1758,7 +1746,6 @@ export function HomeExperience({ links, inPagesDir = false }) {
                         <div className="mt-2 space-y-1 text-sm text-slate-500">
                           <div>标的 {plan.symbol}</div>
                           <div>预算 {formatCurrency(plan.totalBudget, '¥ ')}</div>
-                          <div>更新于 {formatPlanTimeLabel(plan.updatedAt || plan.createdAt)}</div>
                         </div>
                       </div>
                       <div className="shrink-0 self-start text-sm font-semibold text-slate-500 sm:self-center">
@@ -1779,7 +1766,16 @@ export function HomeExperience({ links, inPagesDir = false }) {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard accent="indigo" eyebrow="Portfolio Budget" value={formatCurrency(strategyPlan.investableCapital)} note={selectedStrategy === 'peak-drawdown' ? '按阶段高点固定回撤 8 档分配预算' : '按 MA120 主触发策略分配的预算'} progress={Math.max(100 - reserveRatio, 0)} />
           <StatCard eyebrow="Reserve Cash" value={formatCurrency(strategyPlan.reserveCapital)} note={selectedStrategy === 'peak-drawdown' ? (isBelowPeakExtreme ? '价格已进入第 8 档极端区。' : `${formatPercent(reserveRatio, 1)} 作为极端回撤缓冲`) : (isBelowRiskControl ? '价格已跌破 MA200，进入防守区。' : strategyPlan.usesIndependentRiskLayer ? `${formatPercent(reserveRatio, 1)} 作为 MA200 防守缓冲` : 'MA200 当前高于深水层，仅作趋势风控。')} />
-          <StatCard eyebrow="Next Trigger" value={formatFundPrice(nextBuyPrice, strategyDisplayCurrency)} note={nextTriggerLayer ? `${benchmarkFund?.code || BENCHMARK_CODE} 信号 · 映射到 ${selectedFund?.code || benchmarkFund?.code || BENCHMARK_CODE}` : selectedStrategy === 'peak-drawdown' ? '当前已进入第 8 档极端区' : '当前已进入最深防守区'} />
+          <StatCard
+            eyebrow="Next Trigger"
+            value={formatFundPrice(nextBuyPrice, strategyDisplayCurrency)}
+            note={nextTriggerLayer ? (
+              <>
+                <div>{benchmarkFund?.code || BENCHMARK_CODE} 信号</div>
+                <div>映射到 {selectedFund?.code || benchmarkFund?.code || BENCHMARK_CODE}</div>
+              </>
+            ) : selectedStrategy === 'peak-drawdown' ? '当前已进入第 8 档极端区' : '当前已进入最深防守区'}
+          />
           <StatCard accent="emerald" eyebrow="Average Cost" value={formatFundPrice(displayStrategyPlan.averageCost, strategyDisplayCurrency)} note={selectedStrategy === 'peak-drawdown' ? `${benchmarkFund?.code || BENCHMARK_CODE} 固定跌幅 8 档映射` : `${benchmarkFund?.code || BENCHMARK_CODE} MA120 / MA200 映射`} />
 
           <Card className="min-w-0 md:col-span-2 xl:col-start-2 xl:col-span-3">
