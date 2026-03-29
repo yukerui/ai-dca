@@ -1232,6 +1232,60 @@ export function HomeExperience({ links, inPagesDir = false }) {
           </Card>
 
           <MobileFoldSection
+            eyebrow="Plans"
+            title="策略列表"
+            summary={planList.length ? (
+              <div className="space-y-1 text-sm text-slate-500">
+                <div className="font-semibold text-slate-800">{planState?.name || '当前策略'}</div>
+                <div>共 {planList.length} 条策略，首页只读切换查看</div>
+              </div>
+            ) : '当前还没有策略，先创建一条再回到首页查看。'}
+            isOpen={mobilePanels.plans}
+            onToggle={() => toggleMobilePanel('plans')}
+          >
+            <a className={cx(primaryButtonClass, 'w-full')} href={links.accumNew}>
+              <Plus className="h-4 w-4 shrink-0" />
+              新建策略
+            </a>
+
+            {planList.length ? (
+              <div className="mt-4 space-y-3">
+                {planList.map((plan) => {
+                  const isActive = plan.id === planState.id;
+                  return (
+                    <button
+                      key={`mobile-plan-${plan.id}`}
+                      className={cx(
+                        'w-full rounded-[22px] border px-4 py-4 text-left transition-all',
+                        isActive ? 'border-indigo-200 bg-indigo-50 shadow-sm shadow-indigo-100' : 'border-slate-200 bg-slate-50'
+                      )}
+                      type="button"
+                      onClick={() => handleSelectPlan(plan.id)}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="break-words text-sm font-semibold text-slate-900">{plan.name}</div>
+                          <div className="mt-2 text-xs leading-5 text-slate-500">
+                            标的 {plan.symbol}
+                          </div>
+                          <div className="text-xs leading-5 text-slate-500">
+                            预算 {formatCurrency(plan.totalBudget, '¥ ')}
+                          </div>
+                        </div>
+                        {isActive ? <Pill tone="emerald">当前</Pill> : null}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                还没有已创建的策略。
+              </div>
+            )}
+          </MobileFoldSection>
+
+          <MobileFoldSection
             eyebrow="Price Pulse"
             title="价格走势"
             summary={selectedFund && pricePulse ? (
@@ -1538,57 +1592,6 @@ export function HomeExperience({ links, inPagesDir = false }) {
           </MobileFoldSection>
 
           <MobileFoldSection
-            eyebrow="Plans"
-            title="策略列表"
-            summary={planList.length ? (
-              <div className="space-y-1 text-sm text-slate-500">
-                <div className="font-semibold text-slate-800">{planState?.name || '当前策略'}</div>
-                <div>共 {planList.length} 条策略，首页只读切换查看</div>
-              </div>
-            ) : '当前还没有策略，先创建一条再回到首页查看。'}
-            isOpen={mobilePanels.plans}
-            onToggle={() => toggleMobilePanel('plans')}
-          >
-            <a className={cx(primaryButtonClass, 'w-full')} href={links.accumNew}>
-              <Plus className="h-4 w-4 shrink-0" />
-              新建策略
-            </a>
-
-            {planList.length ? (
-              <div className="mt-4 space-y-3">
-                {planList.map((plan) => {
-                  const isActive = plan.id === planState.id;
-                  return (
-                    <button
-                      key={`mobile-plan-${plan.id}`}
-                      className={cx(
-                        'w-full rounded-[22px] border px-4 py-4 text-left transition-all',
-                        isActive ? 'border-indigo-200 bg-indigo-50 shadow-sm shadow-indigo-100' : 'border-slate-200 bg-slate-50'
-                      )}
-                      type="button"
-                      onClick={() => handleSelectPlan(plan.id)}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="break-words text-sm font-semibold text-slate-900">{plan.name}</div>
-                          <div className="mt-2 text-xs leading-5 text-slate-500">
-                            标的 {plan.symbol} · 预算 {formatCurrency(plan.totalBudget, '¥ ')}
-                          </div>
-                        </div>
-                        {isActive ? <Pill tone="emerald">当前</Pill> : null}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-                还没有已创建的策略。
-              </div>
-            )}
-          </MobileFoldSection>
-
-          <MobileFoldSection
             eyebrow="Capital Mix"
             title="资金配置模型"
             summary={
@@ -1648,6 +1651,38 @@ export function HomeExperience({ links, inPagesDir = false }) {
         </div>
 
         <div className="hidden space-y-6 md:block">
+        <Card className="p-4 sm:p-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Strategy Template</div>
+              <div className="mt-1 text-lg font-bold text-slate-800">{activeStrategyOption.label}</div>
+              <div className="mt-1 text-sm text-slate-500">{activeStrategyOption.note}</div>
+              <div className="mt-1 text-sm text-slate-500">
+                策略在“新建建仓计划”页面创建，首页只读查看执行配置。
+              </div>
+              {planState?.name ? (
+                <div className="mt-1 text-sm text-slate-500">
+                  当前策略 {planState.name}
+                </div>
+              ) : null}
+              <div className="mt-2 space-y-1 text-sm text-slate-500">
+                <div>当前观察标的</div>
+                <div>{selectedFund?.code || '--'}</div>
+                <div>{formatFundPrice(currentFundPrice, selectedFundCurrency)}</div>
+              </div>
+              <div className="mt-2 space-y-1 text-sm text-slate-500">
+                <div>参考基准</div>
+                <div>{benchmarkFund?.code || BENCHMARK_CODE}</div>
+                <div>{formatFundPrice(currentBenchmarkPrice, benchmarkCurrency)}</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <Pill tone="indigo">{activeStrategyOption.shortLabel}</Pill>
+              <Pill tone="slate">{hasConfiguredPlan ? '只读展示' : '使用默认模板预览'}</Pill>
+            </div>
+          </div>
+        </Card>
+
         <Card>
           <SectionHeading
             eyebrow="Plans"
@@ -1683,10 +1718,10 @@ export function HomeExperience({ links, inPagesDir = false }) {
                           <div className="break-words text-base font-semibold leading-6 text-slate-900">{plan.name}</div>
                           {isActive ? <Pill tone="emerald">当前查看</Pill> : null}
                         </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                          <span>标的 {plan.symbol}</span>
-                          <span>预算 {formatCurrency(plan.totalBudget, '¥ ')}</span>
-                          <span>更新于 {formatPlanTimeLabel(plan.updatedAt || plan.createdAt)}</span>
+                        <div className="mt-2 space-y-1 text-sm text-slate-500">
+                          <div>标的 {plan.symbol}</div>
+                          <div>预算 {formatCurrency(plan.totalBudget, '¥ ')}</div>
+                          <div>更新于 {formatPlanTimeLabel(plan.updatedAt || plan.createdAt)}</div>
                         </div>
                       </div>
                       <div className="shrink-0 self-start text-sm font-semibold text-slate-500 sm:self-center">
@@ -1702,34 +1737,6 @@ export function HomeExperience({ links, inPagesDir = false }) {
               还没有已创建的策略。先进入“新建策略”页创建一条，首页才会出现可切换的策略列表。
             </div>
           )}
-        </Card>
-
-        <Card className="p-4 sm:p-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0">
-              <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Strategy Template</div>
-              <div className="mt-1 text-lg font-bold text-slate-800">{activeStrategyOption.label}</div>
-              <div className="mt-1 text-sm text-slate-500">{activeStrategyOption.note}</div>
-              <div className="mt-1 text-sm text-slate-500">
-                策略在“新建建仓计划”页面创建，首页只读查看执行配置。
-              </div>
-              {planState?.name ? (
-                <div className="mt-1 text-sm text-slate-500">
-                  当前策略 {planState.name}
-                </div>
-              ) : null}
-              <div className="mt-1 text-sm text-slate-500">
-                当前观察标的 {selectedFund?.code || '--'} · {formatFundPrice(currentFundPrice, selectedFundCurrency)}
-              </div>
-              <div className="mt-1 text-sm text-slate-500">
-                参考基准 {benchmarkFund?.code || BENCHMARK_CODE} · {formatFundPrice(currentBenchmarkPrice, benchmarkCurrency)}
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-              <Pill tone="indigo">{activeStrategyOption.shortLabel}</Pill>
-              <Pill tone="slate">{hasConfiguredPlan ? '只读展示' : '使用默认模板预览'}</Pill>
-            </div>
-          </div>
         </Card>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
