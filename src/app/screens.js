@@ -3,7 +3,7 @@ export const PROJECT_TITLE = 'Stock Accumulation Calculator Dashboard';
 export const HOME_SCREEN_ID = '75a393ec1a2d424ebafa1d0e59402d26';
 
 export const GROUP_ORDER = ['home', 'accumEdit', 'accumNew', 'addLevel', 'dca', 'fundSwitch', 'history'];
-export const PRIMARY_TAB_ORDER = ['home', 'accumEdit', 'accumNew', 'dca', 'fundSwitch', 'history'];
+export const PRIMARY_TAB_ORDER = ['home', 'dca', 'fundSwitch', 'history'];
 
 export const GROUP_META = {
   home: {
@@ -45,8 +45,6 @@ export const GROUP_META = {
 
 export const PRIMARY_TAB_META = {
   home: { label: '策略总览', hrefKey: 'home' },
-  accumEdit: { label: '加仓配置', hrefKey: 'accumEdit' },
-  accumNew: { label: '新建计划', hrefKey: 'accumNew' },
   dca: { label: '定投计划', hrefKey: 'dca' },
   fundSwitch: { label: '基金切换', hrefKey: 'fundSwitch' },
   history: { label: '交易历史', hrefKey: 'history' }
@@ -129,6 +127,10 @@ export function getPrimaryTabs(links) {
     label: PRIMARY_TAB_META[key].label,
     href: links[PRIMARY_TAB_META[key].hrefKey]
   }));
+}
+
+export function isWorkspaceGroup(group = '') {
+  return PRIMARY_TAB_ORDER.includes(group);
 }
 
 export function buildSiteManifest() {

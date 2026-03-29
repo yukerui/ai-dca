@@ -528,7 +528,7 @@ function MobileFoldSection({ eyebrow, title, summary, isOpen, onToggle, children
   );
 }
 
-export function HomeExperience({ links, inPagesDir = false }) {
+export function HomeExperience({ links, inPagesDir = false, embedded = false }) {
   const accumulationState = readAccumulationState();
   const initialPlanState = readPlanState();
   const [dashboardState] = useState(() => readHomeDashboardState());
@@ -1180,19 +1180,8 @@ export function HomeExperience({ links, inPagesDir = false }) {
 
   const primaryTabs = getPrimaryTabs(links);
 
-  return (
-    <PageShell>
-      <PageHero
-        eyebrow="Strategy Dashboard"
-        title="QQQ 建仓策略总览"
-        badges={[
-          <Pill key="status" tone="indigo">{hasConfiguredPlan ? '已创建策略' : '待创建策略'}</Pill>
-        ]}
-      >
-        <PageTabs activeKey="home" tabs={primaryTabs} />
-      </PageHero>
-
-      <div className="mx-auto max-w-6xl space-y-6 px-6 pt-8">
+  const content = (
+    <div className={cx('mx-auto max-w-6xl space-y-6', embedded ? 'px-4 pt-6 sm:px-6 sm:pt-8' : 'px-6 pt-8')}>
         <div className="space-y-4 md:hidden">
           <Card className="overflow-hidden border-0 bg-gradient-to-br from-indigo-600 via-indigo-500 to-sky-500 p-0 text-white shadow-xl shadow-indigo-200">
             <div className="space-y-5 p-5">
@@ -2124,6 +2113,25 @@ export function HomeExperience({ links, inPagesDir = false }) {
         </div>
         </div>
       </div>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <PageShell>
+      <PageHero
+        eyebrow="Strategy Dashboard"
+        title="QQQ 建仓策略总览"
+        badges={[
+          <Pill key="status" tone="indigo">{hasConfiguredPlan ? '已创建策略' : '待创建策略'}</Pill>
+        ]}
+      >
+        <PageTabs activeKey="home" tabs={primaryTabs} />
+      </PageHero>
+
+      {content}
     </PageShell>
   );
 }

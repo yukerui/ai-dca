@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
 import { AlertTriangle, ArrowRight, CheckCircle2, Plus, Save } from 'lucide-react';
 import { buildStages, formatCurrency, formatPercent, persistAccumulationState, readAccumulationState, round } from '../app/accumulation.js';
-import { getPrimaryTabs } from '../app/screens.js';
-import { Card, Field, NumberInput, PageHero, PageShell, PageTabs, Pill, SectionHeading, cx, primaryButtonClass, secondaryButtonClass } from '../components/experience-ui.jsx';
+import { Card, Field, NumberInput, PageHero, PageShell, Pill, SectionHeading, cx, primaryButtonClass, secondaryButtonClass } from '../components/experience-ui.jsx';
 
 export function AddLevelExperience({ links }) {
   const [baseState, setBaseState] = useState(() => readAccumulationState());
@@ -15,7 +14,6 @@ export function AddLevelExperience({ links }) {
     weights: [...baseState.weights, Math.max(Number(newWeight) || 0, 0)],
     maxDrawdown: Math.max(Number(newDrawdown) || 0, 0)
   }), [baseState, newWeight, newDrawdown]);
-  const primaryTabs = getPrimaryTabs(links);
 
   const preview = useMemo(() => buildStages(previewState), [previewState]);
   const addedStage = preview.stages[preview.stages.length - 1];
@@ -46,9 +44,7 @@ export function AddLevelExperience({ links }) {
           <Pill key="layer" tone="indigo">新增后共 {preview.stages.length} 层</Pill>,
           <Pill key="drawdown" tone="slate">累计跌幅 {formatPercent(previewState.maxDrawdown, 2)}</Pill>
         ]}
-      >
-        <PageTabs activeKey="accumEdit" tabs={primaryTabs} />
-      </PageHero>
+      />
 
       <div className="mx-auto max-w-6xl space-y-6 px-6 pt-8">
         <div className="grid gap-6 lg:grid-cols-5">

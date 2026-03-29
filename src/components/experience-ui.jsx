@@ -103,7 +103,7 @@ export function SectionHeading({ eyebrow, title, description, action, className 
   );
 }
 
-export function PageTabs({ tabs = [], activeKey = '', className = '' }) {
+export function PageTabs({ tabs = [], activeKey = '', className = '', onSelect }) {
   if (!tabs.length) {
     return null;
   }
@@ -121,6 +121,13 @@ export function PageTabs({ tabs = [], activeKey = '', className = '' }) {
                 isActive ? 'bg-white text-slate-900 shadow-sm shadow-slate-200' : 'text-slate-500 hover:bg-white/70 hover:text-slate-700'
               )}
               href={tab.href}
+              onClick={(event) => {
+                if (!onSelect) {
+                  return;
+                }
+                event.preventDefault();
+                onSelect(tab.key);
+              }}
             >
               {tab.label}
             </a>

@@ -616,7 +616,7 @@ function EditingSummaryStrip({ strategy, recognizedCount, onExit, onReset }) {
   );
 }
 
-export function FundSwitchExperience({ links, inPagesDir }) {
+export function FundSwitchExperience({ links, inPagesDir, embedded = false }) {
   const [state, setState] = useState(() => readFundSwitchState());
   const [ocrState, setOcrState] = useState(() => createOcrState());
   const [isEditingDetails, setIsEditingDetails] = useState(false);
@@ -932,32 +932,8 @@ export function FundSwitchExperience({ links, inPagesDir }) {
     setShowCalculationDetails(false);
   }
 
-  return (
-    <PageShell>
-      <input ref={fileInputRef} accept="image/*" hidden onChange={handleFileInputChange} type="file" />
-
-      <PageHero
-        backHref={links.home}
-        backLabel="返回策略总览"
-        eyebrow="Fund Switch Assistant"
-        title="基金切换收益助手"
-        description="上传交易截图后，系统会智能识别整理成可编辑交易数据，并按 direct / trace 两种来源策略比较切换前后的真实收益。"
-        badges={hasImportedData ? [] : [
-          <span key="status" className={cx('inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold', statusMeta.colorClass)}>
-            <statusMeta.Icon className={cx('h-4 w-4', statusMeta.iconClassName)} />
-            {statusMeta.label}
-          </span>
-        ]}
-        actions={!hasImportedData ? (
-          <button className={cx(primaryButtonClass, 'w-full sm:w-auto')} type="button" onClick={openFilePicker}>
-            <Upload className="h-4 w-4" />
-            上传截图
-          </button>
-        ) : null}
-      >
-        <PageTabs activeKey="fundSwitch" tabs={primaryTabs} />
-      </PageHero>
-
+  const content = (
+    <>
       <div className="mx-auto max-w-6xl space-y-4 px-4 pt-6 sm:space-y-6 sm:px-6 sm:pt-8">
         {!hasImportedData ? (
           <Card className="flex flex-col p-4 sm:p-6">
@@ -1351,6 +1327,45 @@ export function FundSwitchExperience({ links, inPagesDir }) {
           )}
         </div>
       </div>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <>
+        <input ref={fileInputRef} accept="image/*" hidden onChange={handleFileInputChange} type="file" />
+        {content}
+      </>
+    );
+  }
+
+  return (
+    <PageShell>
+      <input ref={fileInputRef} accept="image/*" hidden onChange={handleFileInputChange} type="file" />
+
+      <PageHero
+        backHref={links.home}
+        backLabel="返回策略总览"
+        eyebrow="Fund Switch Assistant"
+        title="基金切换收益助手"
+        description="上传交易截图后，系统会智能识别整理成可编辑交易数据，并按 direct / trace 两种来源策略比较切换前后的真实收益。"
+        badges={hasImportedData ? [] : [
+          <span key="status" className={cx('inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold', statusMeta.colorClass)}>
+            <statusMeta.Icon className={cx('h-4 w-4', statusMeta.iconClassName)} />
+            {statusMeta.label}
+          </span>
+        ]}
+        actions={!hasImportedData ? (
+          <button className={cx(primaryButtonClass, 'w-full sm:w-auto')} type="button" onClick={openFilePicker}>
+            <Upload className="h-4 w-4" />
+            上传截图
+          </button>
+        ) : null}
+      >
+        <PageTabs activeKey="fundSwitch" tabs={primaryTabs} />
+      </PageHero>
+
+      {content}
     </PageShell>
   );
 }

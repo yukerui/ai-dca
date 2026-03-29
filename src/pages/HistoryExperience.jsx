@@ -1,7 +1,7 @@
 import { ArrowRight, Calendar, Filter, LineChart, Shield, Wallet } from 'lucide-react';
 import { buildStages, formatCurrency, readAccumulationState } from '../app/accumulation.js';
 import { getPrimaryTabs } from '../app/screens.js';
-import { Card, PageHero, PageShell, PageTabs, Pill, SectionHeading, StatCard, secondaryButtonClass } from '../components/experience-ui.jsx';
+import { Card, PageHero, PageShell, PageTabs, Pill, SectionHeading, StatCard, cx, secondaryButtonClass } from '../components/experience-ui.jsx';
 
 const sampleHistory = [
   { date: '2024-03-25', type: '买入', shares: 10, price: 445.2, status: '已提交' },
@@ -11,7 +11,7 @@ const sampleHistory = [
   { date: '2024-02-26', type: '买入', shares: 12, price: 432.4, status: '已提交' }
 ];
 
-export function HistoryExperience({ links }) {
+export function HistoryExperience({ links, embedded = false }) {
   const accumulationState = readAccumulationState();
   const accumulation = buildStages(accumulationState);
   const totalShares = sampleHistory.reduce((sum, row) => sum + row.shares, 0);
@@ -20,23 +20,8 @@ export function HistoryExperience({ links }) {
   const sellAmount = sampleHistory.filter((row) => row.type === '卖出').reduce((sum, row) => sum + row.shares * row.price, 0);
   const primaryTabs = getPrimaryTabs(links);
 
-  return (
-    <PageShell>
-      <PageHero
-        backHref={links.accumEdit}
-        backLabel="返回加仓配置"
-        eyebrow="Execution History"
-        title="QQQ 交易历史"
-        description="把最近执行过的买卖记录集中到一个轻量 SaaS 表格里，便于快速核对执行密度、累计金额和当前计划的一致性。"
-        badges={[
-          <Pill key="symbol" tone="indigo">QQQ</Pill>,
-          <Pill key="count" tone="slate">{sampleHistory.length} 条记录</Pill>
-        ]}
-      >
-        <PageTabs activeKey="history" tabs={primaryTabs} />
-      </PageHero>
-
-      <div className="mx-auto max-w-6xl space-y-6 px-6 pt-8">
+  const content = (
+    <div className={cx('mx-auto max-w-6xl space-y-6', embedded ? 'px-4 pt-6 sm:px-6 sm:pt-8' : 'px-6 pt-8')}>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard eyebrow="Gross Shares" value={`${totalShares.toFixed(2)} 股`} note="最近执行记录累计股数" />
           <StatCard eyebrow="Average Price" value={formatCurrency(totalInvestment / Math.max(totalShares, 1))} note="历史成交均价" />
@@ -149,6 +134,29 @@ export function HistoryExperience({ links }) {
           </Card>
         </div>
       </div>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <PageShell>
+      <PageHero
+        backHref={links.accumEdit}
+        backLabel="返回加仓配置"
+        eyebrow="Execution History"
+        title="QQQ 交易历史"
+        description="把最近执行过的买卖记录集中到一个轻量 SaaS 表格里，便于快速核对执行密度、累计金额和当前计划的一致性。"
+        badges={[
+          <Pill key="symbol" tone="indigo">QQQ</Pill>,
+          <Pill key="count" tone="slate">{sampleHistory.length} 条记录</Pill>
+        ]}
+      >
+        <PageTabs activeKey="history" tabs={primaryTabs} />
+      </PageHero>
+
+      {content}
     </PageShell>
   );
 }

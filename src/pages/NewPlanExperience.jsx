@@ -4,8 +4,7 @@ import { formatCurrency, formatPercent } from '../app/accumulation.js';
 import { readHomeDashboardState } from '../app/homeDashboard.js';
 import { loadLatestNasdaqPrices, loadNasdaqDailySeries } from '../app/nasdaqPrices.js';
 import { persistPlanState, readPlanState } from '../app/plan.js';
-import { getPrimaryTabs } from '../app/screens.js';
-import { Card, Field, NumberInput, PageHero, PageShell, PageTabs, Pill, SectionHeading, SelectField, TextInput, cx, primaryButtonClass, secondaryButtonClass } from '../components/experience-ui.jsx';
+import { Card, Field, NumberInput, PageHero, PageShell, Pill, SectionHeading, SelectField, TextInput, cx, primaryButtonClass, secondaryButtonClass } from '../components/experience-ui.jsx';
 
 const BENCHMARK_CODE = 'nas-daq100';
 const frequencyOptions = ['每日', '每周', '每月', '每季'];
@@ -219,7 +218,6 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
     bars: [],
     ready: false
   });
-  const primaryTabs = getPrimaryTabs(links);
   const autoSeedRef = useRef('');
 
   useEffect(() => {
@@ -403,9 +401,7 @@ export function NewPlanExperience({ links, inPagesDir = false }) {
           <Pill key="benchmark" tone="slate">{benchmarkFund?.code || BENCHMARK_CODE}</Pill>,
           <Pill key="strategy" tone="slate">{activeStrategy.label}</Pill>
         ]}
-      >
-        <PageTabs activeKey="accumNew" tabs={primaryTabs} />
-      </PageHero>
+      />
 
       <div className="mx-auto max-w-6xl space-y-6 px-6 pt-8">
         <div className="grid gap-6 lg:grid-cols-5">

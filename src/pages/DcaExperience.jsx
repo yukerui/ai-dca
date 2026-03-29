@@ -7,7 +7,7 @@ import { Card, Field, NumberInput, PageHero, PageShell, PageTabs, Pill, SectionH
 
 const DAY_OPTIONS = [1, 8, 15, 28];
 
-export function DcaExperience({ links }) {
+export function DcaExperience({ links, embedded = false }) {
   const [state, setState] = useState(() => readDcaState());
   const projection = useMemo(() => buildDcaProjection(state), [state]);
   const primaryTabs = getPrimaryTabs(links);
@@ -16,23 +16,9 @@ export function DcaExperience({ links }) {
     persistDcaState(state, projection);
   }, [state, projection]);
 
-  return (
-    <PageShell>
-      <PageHero
-        backHref={links.home}
-        backLabel="返回策略总览"
-        eyebrow="Dollar Cost Averaging"
-        title="定投计划"
-        description="围绕初始投入、定投金额和执行频率建立更克制的长期买入节奏，让固定现金流可以直接映射到可执行的买入日程。"
-        badges={[
-          <Pill key="cadence" tone="indigo">{projection.cadenceLabel}</Pill>,
-          <Pill key="count" tone="slate">{projection.executionCount} 次执行</Pill>
-        ]}
-      >
-        <PageTabs activeKey="dca" tabs={primaryTabs} />
-      </PageHero>
-
-      <div className="mx-auto max-w-6xl space-y-6 px-6 pt-8">
+  const content = (
+    <>
+      <div className={cx('mx-auto max-w-6xl space-y-6', embedded ? 'px-4 pt-6 sm:px-6 sm:pt-8' : 'px-6 pt-8')}>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard accent="indigo" eyebrow="Total Investment" value={formatCurrency(projection.totalInvestment, '¥ ')} note="初始投入加上所有周期定投之和" />
           <StatCard eyebrow="Expected Return" value={formatCurrency(projection.totalInvestment * state.targetReturn / 100, '¥ ')} note={`按目标收益 ${formatPercent(state.targetReturn, 0)} 估算`} />
@@ -202,6 +188,30 @@ export function DcaExperience({ links }) {
           </div>
         </div>
       </div>
+    </>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <PageShell>
+      <PageHero
+        backHref={links.home}
+        backLabel="返回策略总览"
+        eyebrow="Dollar Cost Averaging"
+        title="定投计划"
+        description="围绕初始投入、定投金额和执行频率建立更克制的长期买入节奏，让固定现金流可以直接映射到可执行的买入日程。"
+        badges={[
+          <Pill key="cadence" tone="indigo">{projection.cadenceLabel}</Pill>,
+          <Pill key="count" tone="slate">{projection.executionCount} 次执行</Pill>
+        ]}
+      >
+        <PageTabs activeKey="dca" tabs={primaryTabs} />
+      </PageHero>
+
+      {content}
     </PageShell>
   );
 }
